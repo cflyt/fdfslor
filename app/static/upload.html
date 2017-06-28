@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html"; charset="utf-8">
+    <style>
+    body {
+        font: 400 14px/1.6 "Open Sans",sans-serif;
+        color: #555;
+    }
+
+    .lor {
+        margin: 100px auto;
+        width: 800px;
+    }
+
+    .name {
+        display: block;
+        font: 100 4.5em "Helvetica Neue","Open Sans",sans-serif;
+        margin-bottom: 0.25em;
+    }
+
+    a {
+        color: #259DFF;
+        text-decoration: none;
+    }
+
+    .description {
+      position: relative;
+      top: -5px;
+      font: 100 3em "Helvetica Neue","Open Sans",sans-serif;
+      color: #AEAEAE;
+    }
+    </style>
+</head>
+<body>
+
+<div class="lor">
+  <form action="/file/new/?foo=123&token=111111111" method="POST" enctype="multipart/form-data">
+    <p>user: <input type="text" name="fname" /></p>
+    <p>token: <input type="text" name="lname" /></p>
+    <p>选择上传文件: <input type="file" name="bigofile"/></p>
+    <p>选择上传文件2: <input type="file" name="bigofile2"/></p>
+    <input type="submit" value="Submit" />
+  </form>
+
+</div>
+</body>
+</html>
