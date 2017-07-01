@@ -1,11 +1,15 @@
 
+local utils = require("app.utils")
 local string = string
 local table  = table
-local bit    = bit32
+local bit    = bit
 local ngx    = ngx
 local tonumber = tonumber
 local setmetatable = setmetatable
 local error = error
+local type = type
+local pairs = pairs
+local tostring = tostring
 
 module(...)
 
@@ -28,6 +32,20 @@ local FDFS_PROTO_CMD_QUIT = 82
 local TRACKER_PROTO_CMD_RESP = 100
 
 local mt = { __index = _M }
+
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
 
 function new(self)
     return setmetatable({}, mt)
@@ -69,7 +87,7 @@ function read_fdfs_header(sock)
     local header = {}
     local buf, err = sock:receive(10)
     if not buf then
-        ngx.log(ngx.ERR, "fdfs: read header error")
+        ngx.log(ngx.ERR, "fdfs: read header error", err)
         sock:close()
         ngx.exit(500)
     end
@@ -80,6 +98,9 @@ function read_fdfs_header(sock)
 end
 
 function fix_string(str, fix_length)
+    if not str then
+        str = ""
+    end
     local len = string.len(str)
     if len > fix_length then
         len = fix_length
@@ -268,6 +289,98 @@ function do_upload_appender(self, ext_name)
         sock:setkeepalive(keepalive.timeout, keepalive.size)
     end
     return res
+end
+
+function do_upload2(self, reader, file_size, ext_name, chunk_size)
+    if not chunk_size then
+        chunk_size = 1024
+    end
+
+    local reader = reader
+    if not reader then
+        return nil, "reader is nil"
+    end
+
+    local storage = self:query_upload_storage()
+    if not storage then
+        return nil, "can't query storage"
+    end
+
+    ngx.log(ngx.ERR, storage.host, storage.port)
+    -- ext_name
+    if not ext_name then
+        ext_name = ""
+    end
+    ext_name = fix_string(ext_name, FDFS_FILE_EXT_NAME_MAX_LEN)
+    -- get file size
+    -- local file_size = tonumber(ngx.var.content_length)
+    if not file_size or file_size <= 0 then
+        return nil, "invalid file size" .. file_size
+    end
+
+    local sock, err = ngx.socket.tcp()
+    if not sock then
+        return nil, err
+    end
+    if self.timeout then
+        sock:settimeout(self.timeout)
+    end
+
+    local ok, err = sock:connect(storage.host, storage.port)
+    if not ok then
+        return nil, err
+    end
+
+    -- send header
+    local out = {}
+    table.insert(out, int2buf(file_size + 15))
+    table.insert(out, string.char(STORAGE_PROTO_CMD_UPLOAD_FILE))
+    -- status
+    table.insert(out, "\00")
+    -- store_path_index
+    table.insert(out, string.char(storage.store_path_index))
+    -- filesize
+    table.insert(out, int2buf(file_size))
+    -- exitname
+    table.insert(out, ext_name)
+    local bytes, err = sock:send(out)
+    if not bytes then
+        return nil, err
+    end
+
+    -- send file data
+    local send_count = 0
+    while true do
+        local chunk = reader(chunk_size)
+        if not chunk then
+            break
+        end
+        local bytes, err = sock:send(chunk)
+        if not bytes then
+            ngx.log(ngx.ngx.ERR, "fdfs: send body error")
+            sock:close()
+            ngx.exit(500)
+        end
+
+        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        send_count = send_count + bytes
+    end
+    if send_count ~= file_size then
+        -- send file not full
+        ngx.log(ngx.ERR, "fdfs: read file body not full, send: " .. send_count, " file size: " .. file_size)
+        sock:close()
+        ngx.exit(500)
+    end
+
+    -- read response
+    local res_hdr = read_fdfs_header(sock)
+    local res = read_storage_result(sock, res_hdr)
+    local keepalive = self.storage_keepalive
+    if keepalive then
+        sock:setkeepalive(keepalive.timeout, keepalive.size)
+    end
+    return res
+
 end
 
 function do_upload(self, ext_name)
@@ -506,6 +619,69 @@ function query_download_storage_ex(self, group_name, file_name)
     end
     return res
 end
+
+function do_download2(self, fileid, start, stop)
+    local storage = self:query_download_storage(fileid)
+    if not storage then
+        return nil
+    end
+    local out = {}
+    -- file_offset(8)  download_bytes(8)  group_name(16)  file_name(n)
+    table.insert(out, int2buf(32 + string.len(storage.file_name)))
+    table.insert(out, string.char(STORAGE_PROTO_CMD_DOWNLOAD_FILE))
+    table.insert(out, "\00")
+    -- file_offset  download_bytes  8 + 8
+    local offset = start or 0
+    local download_bytes = 0
+    if stop then
+        download_bytes = stop - start
+    end
+    table.insert(out, int2buf(offset))
+    table.insert(out, int2buf(download_bytes))
+    -- table.insert(out, string.rep("\00", 16))
+    -- group name
+    table.insert(out, fix_string(storage.group_name, 16))
+    -- file name
+    table.insert(out, storage.file_name)
+    -- init socket
+    local sock, err = ngx.socket.tcp()
+    if not sock then
+        return nil, err
+    end
+    sock:settimeout(self.timeout)
+    local ok, err = sock:connect(storage.host, storage.port)
+    if not ok then
+        return nil, err
+    end
+    local bytes, err = sock:send(out)
+    if not bytes then
+        ngx.log(ngx.ERR, "fdfs: send request error" .. err)
+        sock:close()
+        ngx.exit(500)
+    end
+    -- read request header
+    local hdr = read_fdfs_header(sock)
+    ngx.log(ngx.ERR, "hdr: ", hdr.len)
+    local keepalive = self.storage_keepalive
+    if keepalive then
+        sock:setkeepalive(keepalive.timeout, keepalive.size)
+    end
+
+    return utils:make_reader(sock), hdr.len
+
+    -- read request bodya
+     -- local data, partial
+     -- if hdr.len > 0 then
+     --     data, err, partial = sock:receive(hdr.len)
+     --     if not data then
+     --         ngx.log(ngx.ERR, "read file body error:" .. err)
+     --         sock:close()
+     --         ngx.exit(500)
+     --     end
+     -- end
+    -- return data
+end
+
 
 function do_download(self, fileid)
     local storage = self:query_download_storage(fileid)

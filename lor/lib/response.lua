@@ -104,10 +104,14 @@ function Response:send_text(text)
     self:_send(text)
 end
 
+function Response:send(data)
+    self:_send(data)
+end
+
 --~=============================================================
 
 function Response:_send(content)
-    ngx.status =  self.http_status or 200
+    -- ngx.status =  self.http_status or 200
     ngx.print(content)
 end
 

@@ -1,4 +1,7 @@
 local upload = require("resty.upload")
+local byterange = require("lor.lib.byterange")
+local Range = byterange.Range
+local ContentRange = byterange.ContentRange
 local sfind = string.find
 local smatch = string.match
 local ssub = string.sub
@@ -14,6 +17,15 @@ local co_resume = coroutine.resume
 local io = io
 
 local Request = {}
+-- local Request = {__index = function(table, key)
+--                     local ok, err = pcall(type(table[key]))
+--                     if not ok then
+--                         return nil
+--                     else
+--                         return table[key]
+--                     end
+--                 end}
+--
 local MAX_POST_ARGS_NUM = 64
 local default_chunk_size = 100
 
@@ -57,23 +69,36 @@ end
 function Request:new()
     local headers = ngx.req.get_headers()
     local length = tonumber(headers["Content-Length"])
+    ngx.log(ngx.ERR, 'header:', headers["Range"])
     local instance = {
         path = ngx.var.uri, -- uri
         method = ngx.req.get_method(),
         params = {},
-        url = ngx.var.request_uri,
-        origin_uri = ngx.var.request_uri,
         uri = ngx.var.request_uri,
         content_type = ngx.var.content_type,
         headers = headers, -- request headers
         content_length = length,
         version = ngx.req.http_version(),
+        range = Range:parse(headers["Range"]),
         -- uri_args = ngx.var.args,
         body_read = false,
         found = false -- 404 or not
     }
     setmetatable(instance, { __index = self })
     return instance
+end
+
+function Request:is_multipart()
+    local content_type = self.content_type
+    if not content_type then
+        return false
+    end
+    local s = smatch(content_type, "multipart/form%-data")
+    if s then
+        return true
+    else
+        return false
+    end
 end
 
 local function _multipart_formdata()
@@ -181,6 +206,10 @@ function Request:POST()
 end
 
 function Request:args()
+    if self._args then
+        local args = self._args
+        return args
+    end
     local ar = self:GET()
     local post = self:POST() or {}
     for k,v in pairs(post) do
@@ -194,6 +223,7 @@ function Request:args()
             ar[k] = v
         end
     end
+    self._args = ar
     return ar
 end
 
@@ -252,8 +282,6 @@ local function _body_file_reader(max_chunk_size)
             end
 
             if body_file and buffer_remain == 0 then
-
-                ngx.log(ngx.ERR, "nginx read temp file!!!!!!!!!!")
                 local chunk2 = body_file:read(need_read_bytes)
                 if chunk then
                     chunk = chunk .. chunk2
