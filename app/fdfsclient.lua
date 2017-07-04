@@ -1,5 +1,10 @@
 
 local utils = require("app.utils")
+local lor_utils = require("lor.lib.utils.utils")
+setmetatable(utils, {__index=lor_utils})
+--local base64 = require("lor.lib.utils.base64")
+local base64 = require("lor.lib.utils.ee5_base64")
+local iputils = require("lor.lib.utils.ip")
 local string = string
 local table  = table
 local bit    = bit
@@ -10,6 +15,8 @@ local error = error
 local type = type
 local pairs = pairs
 local tostring = tostring
+
+
 
 module(...)
 
@@ -30,6 +37,68 @@ local STORAGE_PROTO_CMD_APPEND_FILE = 24
 local FDFS_FILE_EXT_NAME_MAX_LEN = 6
 local FDFS_PROTO_CMD_QUIT = 82
 local TRACKER_PROTO_CMD_RESP = 100
+
+
+--filename info
+local FDFS_FILENAME_BASE64_LENGTH = 27
+local FDFS_FILE_EXT_NAME_MAX_LEN = 6
+local FDFS_STORAGE_STORE_PATH_PREFIX_CHAR = 'M'
+local FDFS_STORAGE_ID_MAX_SIZE = 16
+local FDFS_ONE_MB =  (1024 * 1024)
+local FDFS_TRUNK_FILE_HEADER_SIZE = (17 + FDFS_FILE_EXT_NAME_MAX_LEN + 1)
+local FDFS_GROUP_NAME_MAX_LEN = 16
+local FDFS_MAX_SERVERS_EACH_GROUP = 32
+local FDFS_MAX_GROUPS = 512
+local FDFS_MAX_TRACKERS = 16
+
+local FDFS_MAX_META_NAME_LEN = 64
+local FDFS_MAX_META_VALUE_LEN = 256
+
+local FDFS_FILE_PREFIX_MAX_LEN = 16
+local FDFS_LOGIC_FILE_PATH_LEN = 10
+local FDFS_TRUE_FILE_PATH_LEN =  6
+local FDFS_FILENAME_BASE64_LENGTH = 27
+local FDFS_TRUNK_FILE_INFO_LEN = 16
+--local FDFS_MAX_SERVER_ID        ((1 << 24) - 1)
+--
+local FDFS_MAX_SERVER_ID = bit.lshift(1, 24) - 1
+
+local FDFS_ID_TYPE_SERVER_ID = 1
+local FDFS_ID_TYPE_IP_ADDRESS = 2
+local IP_ADDRESS_SIZE = 16
+
+local BASE64_IGNORE = -1
+local BASE64_PAD =  -2
+
+local FDFS_FILE_ID_SEPERATOR  = '/'
+local FDFS_FILE_ID_SEPERATE_STR =  "/"
+
+local FDFS_FILE_EXT_NAME_MAX_LEN  = 6
+local FDFS_TRUNK_FILE_HEADER_SIZE = (17 + FDFS_FILE_EXT_NAME_MAX_LEN + 1)
+
+--local FDFS_TRUNK_FILE_MARK_SIZE  = (512 * 1024 * 1024 * 1024 * 1024 * 1024)
+local FDFS_TRUNK_FILE_MARK_SIZE  = bit.lshift(1, 27) -- 高32位的值
+
+--local INFINITE_FILE_SIZE = (256 * 1024 * 1024 * 1024 * 1024 * 1024)
+local INFINITE_FILE_SIZE = bit.lshift(1, 26)  --高32位的值
+local FDFS_APPENDER_FILE_SIZE = INFINITE_FILE_SIZE
+
+local FDFS_NORMAL_LOGIC_FILENAME_LENGTH  = (FDFS_LOGIC_FILE_PATH_LEN +
+        FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1)
+
+local FDFS_TRUNK_FILENAME_LENGTH = (FDFS_TRUE_FILE_PATH_LEN +
+        FDFS_FILENAME_BASE64_LENGTH + FDFS_TRUNK_FILE_INFO_LEN +
+        1 + FDFS_FILE_EXT_NAME_MAX_LEN)
+
+local FDFS_TRUNK_LOGIC_FILENAME_LENGTH =  (FDFS_TRUNK_FILENAME_LENGTH +
+        (FDFS_LOGIC_FILE_PATH_LEN - FDFS_TRUE_FILE_PATH_LEN))
+
+
+local IP_ADDRESS_SIZE = 16
+
+local function IS_UPPER_HEX(ch)
+    return ((ch >= '0' and ch <= '9') or (ch >= 'A' and ch <= 'F'))
+end
 
 local mt = { __index = _M }
 
@@ -73,15 +142,45 @@ function set_storage_keepalive(self, timeout, size)
 end
 
 function int2buf(n)
-    -- only trans 32bit  full is 64bit
+    ngx.log(ngx.ERR,  string.format("%d:%d:%d:%d", bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff)))
     return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
+    --return string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
 end
 
 function buf2int(buf)
-    -- only trans 32bit  full is 64bit
+    -- local c1, c2, c3, c4 = string.byte(buf, 5, 8)
+    local c1, c2, c3, c4 = string.byte(buf, 1, 4)
+    ngx.log(ngx.ERR,  "buf2int:", string.format("%d:%d:%d:%d", c1,c2,c3,c4))
+    return bit.bor(bit.lshift(c1, 24), bit.lshift(c2, 16),bit.lshift(c3, 8), c4)
+end
+
+function long2buf(n)
+    return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
+
+    --return string.char(bit.band(bit.rshift(n, 56), 0xff),
+    --                     bit.band(bit.rshift(n, 48), 0xff),
+    --                     bit.band(bit.rshift(n, 40), 0xff),
+    --                     bit.band(bit.rshift(n, 32), 0xff),
+    --                     bit.band(bit.rshift(n, 24), 0xff),
+    --                     bit.band(bit.rshift(n, 16), 0xff),
+    --                     bit.band(bit.rshift(n, 8), 0xff),
+    --                     bit.band(n, 0xff))
+end
+
+function buf2long(buf)
+    --local c1, c2, c3, c4,c5,c6,c7,c8 = string.byte(buf, 1, 8)
+    --return bit.bor(bit.lshift(c1, 56),
+    --                bit.lshift(c2, 48),
+    --                bit.lshift(c3, 40),
+    --                bit.lshift(c4, 32),
+    --                bit.lshift(c5, 24),
+    --                bit.lshift(c6, 16),
+    --                bit.lshift(c7, 8),
+    --                c8)
     local c1, c2, c3, c4 = string.byte(buf, 5, 8)
     return bit.bor(bit.lshift(c1, 24), bit.lshift(c2, 16),bit.lshift(c3, 8), c4)
 end
+
 
 function read_fdfs_header(sock)
     local header = {}
@@ -91,7 +190,8 @@ function read_fdfs_header(sock)
         sock:close()
         ngx.exit(500)
     end
-    header.len = buf2int(string.sub(buf, 1, 8))
+    -- header.len = buf2int(string.sub(buf, 1, 8))
+    header.len = buf2long(string.sub(buf, 1, 8))
     header.cmd = string.byte(buf, 9)
     header.status = string.byte(buf, 10)
     return header
@@ -136,7 +236,8 @@ function read_tracket_result(sock, header)
         local buf = sock:receive(header.len)
         res.group_name = strip_string(string.sub(buf, 1, 16))
         res.host       = strip_string(string.sub(buf, 17, 31))
-        res.port       = buf2int(string.sub(buf, 32, 39))
+        -- res.port       = buf2int(string.sub(buf, 32, 39))
+        res.port       = buf2long(string.sub(buf, 32, 39))
         res.store_path_index = string.byte(string.sub(buf, 40, 40))
         return res
     else
@@ -165,7 +266,7 @@ function query_upload_storage(self, group_name)
     if group_name then
         -- query upload with group_name
         -- package length
-        table.insert(out, int2buf(16))
+        table.insert(out, long2buf(16))
         -- cmd
         table.insert(out, string.char(TRACKER_PROTO_CMD_SERVICE_QUERY_STORE_WITH_GROUP_ONE))
         -- status
@@ -235,14 +336,14 @@ function do_upload_appender(self, ext_name)
     end
     -- send header
     local out = {}
-    table.insert(out, int2buf(file_size + 15))
+    table.insert(out, long2buf(file_size + 15))
     table.insert(out, string.char(STORAGE_PROTO_CMD_UPLOAD_APPENDER_FILE))
     -- status
     table.insert(out, "\00")
     -- store_path_index
     table.insert(out, string.char(storage.store_path_index))
     -- filesize
-    table.insert(out, int2buf(file_size))
+    table.insert(out, long2buf(file_size))
     -- exitname
     table.insert(out, ext_name)
     local bytes, err = sock:send(out)
@@ -281,6 +382,75 @@ function do_upload_appender(self, ext_name)
         sock:close()
         ngx.exit(500)
     end
+    -- read response
+    local res_hdr = read_fdfs_header(sock)
+    local res = read_storage_result(sock, res_hdr)
+    local keepalive = self.storage_keepalive
+    if keepalive then
+        sock:setkeepalive(keepalive.timeout, keepalive.size)
+    end
+    return res
+end
+
+function do_upload_appender2(self, reader, filesize, ext_name, chunk_size)
+    local storage = self:query_upload_storage()
+    if not storage then
+        return nil
+    end
+     -- get file size
+    local file_size = filesize or 0
+
+    ext_name = fix_string(ext_name, FDFS_FILE_EXT_NAME_MAX_LEN)
+    local sock, err = ngx.socket.tcp()
+    if not sock then
+        return nil, err
+    end
+    if self.timeout then
+        sock:settimeout(self.timeout)
+    end
+    local ok, err = sock:connect(storage.host, storage.port)
+    if not ok then
+        return nil, err
+    end
+    -- send header
+    local out = {}
+    table.insert(out, long2buf(file_size + 15))
+    table.insert(out, string.char(STORAGE_PROTO_CMD_UPLOAD_APPENDER_FILE))
+    -- status
+    table.insert(out, "\00")
+    -- store_path_index
+    table.insert(out, string.char(storage.store_path_index))
+    -- filesize
+    table.insert(out, long2buf(file_size))
+    -- exitname
+    table.insert(out, ext_name)
+    local bytes, err = sock:send(out)
+
+    chunk_size = chunk_size or 1024
+    -- send file data
+    local send_count = 0
+    while reader do
+        local chunk = reader(chunk_size)
+        if not chunk then
+            break
+        end
+        local bytes, err = sock:send(chunk)
+        if not bytes then
+            ngx.log(ngx.ngx.ERR, "fdfs: send body error")
+            sock:close()
+            ngx.exit(500)
+        end
+
+        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        send_count = send_count + bytes
+    end
+    if send_count ~= file_size then
+        -- send file not full
+        ngx.log(ngx.ERR, "fdfs: read file body not full, send: " .. send_count, " file size: " .. file_size)
+        sock:close()
+        ngx.exit(500)
+    end
+
     -- read response
     local res_hdr = read_fdfs_header(sock)
     local res = read_storage_result(sock, res_hdr)
@@ -333,14 +503,14 @@ function do_upload2(self, reader, file_size, ext_name, chunk_size)
 
     -- send header
     local out = {}
-    table.insert(out, int2buf(file_size + 15))
+    table.insert(out, long2buf(file_size + 15))
     table.insert(out, string.char(STORAGE_PROTO_CMD_UPLOAD_FILE))
     -- status
     table.insert(out, "\00")
     -- store_path_index
     table.insert(out, string.char(storage.store_path_index))
     -- filesize
-    table.insert(out, int2buf(file_size))
+    table.insert(out, long2buf(file_size))
     -- exitname
     table.insert(out, ext_name)
     local bytes, err = sock:send(out)
@@ -350,7 +520,7 @@ function do_upload2(self, reader, file_size, ext_name, chunk_size)
 
     -- send file data
     local send_count = 0
-    while true do
+    while reader do
         local chunk = reader(chunk_size)
         if not chunk then
             break
@@ -410,14 +580,14 @@ function do_upload(self, ext_name)
     end
     -- send header
     local out = {}
-    table.insert(out, int2buf(file_size + 15))
+    table.insert(out, long2buf(file_size + 15))
     table.insert(out, string.char(STORAGE_PROTO_CMD_UPLOAD_FILE))
     -- status
     table.insert(out, "\00")
     -- store_path_index
     table.insert(out, string.char(storage.store_path_index))
     -- filesize
-    table.insert(out, int2buf(file_size))
+    table.insert(out, long2buf(file_size))
     -- exitname
     table.insert(out, ext_name)
     local bytes, err = sock:send(out)
@@ -469,7 +639,7 @@ end
 function query_update_storage_ex(self, group_name, file_name)
     local out = {}
     -- package length
-    table.insert(out, int2buf(16 + string.len(file_name)))
+    table.insert(out, long2buf(16 + string.len(file_name)))
     -- cmd
     table.insert(out, string.char(TRACKER_PROTO_CMD_SERVICE_QUERY_UPDATE))
     -- status
@@ -531,7 +701,7 @@ function do_delete(self, fileid)
         return nil
     end
     local out = {}
-    table.insert(out, int2buf(16 + string.len(storage.file_name)))
+    table.insert(out, long2buf(16 + string.len(storage.file_name)))
     table.insert(out, string.char(STORAGE_PROTO_CMD_DELETE_FILE))
     table.insert(out, "\00")
     -- group name
@@ -579,7 +749,7 @@ end
 function query_download_storage_ex(self, group_name, file_name)
     local out = {}
     -- package length
-    table.insert(out, int2buf(16 + string.len(file_name)))
+    table.insert(out, long2buf(16 + string.len(file_name)))
     -- cmd
     table.insert(out, string.char(TRACKER_PROTO_CMD_SERVICE_QUERY_FETCH_ONE))
     -- status
@@ -627,7 +797,7 @@ function do_download2(self, fileid, start, stop)
     end
     local out = {}
     -- file_offset(8)  download_bytes(8)  group_name(16)  file_name(n)
-    table.insert(out, int2buf(32 + string.len(storage.file_name)))
+    table.insert(out, long2buf(32 + string.len(storage.file_name)))
     table.insert(out, string.char(STORAGE_PROTO_CMD_DOWNLOAD_FILE))
     table.insert(out, "\00")
     -- file_offset  download_bytes  8 + 8
@@ -636,13 +806,14 @@ function do_download2(self, fileid, start, stop)
     if stop then
         download_bytes = stop - start
     end
-    table.insert(out, int2buf(offset))
-    table.insert(out, int2buf(download_bytes))
+    table.insert(out, long2buf(offset))
+    table.insert(out, long2buf(download_bytes))
     -- table.insert(out, string.rep("\00", 16))
     -- group name
     table.insert(out, fix_string(storage.group_name, 16))
     -- file name
     table.insert(out, storage.file_name)
+
     -- init socket
     local sock, err = ngx.socket.tcp()
     if not sock then
@@ -690,7 +861,7 @@ function do_download(self, fileid)
     end
     local out = {}
     -- file_offset(8)  download_bytes(8)  group_name(16)  file_name(n)
-    table.insert(out, int2buf(32 + string.len(storage.file_name)))
+    table.insert(out, long2buf(32 + string.len(storage.file_name)))
     table.insert(out, string.char(STORAGE_PROTO_CMD_DOWNLOAD_FILE))
     table.insert(out, "\00")
     -- file_offset  download_bytes  8 + 8
@@ -734,6 +905,80 @@ function do_download(self, fileid)
     return data
 end
 
+function do_append2(self, fileid, reader, file_size, chunk_size )
+    local storage = self:query_update_storage(fileid)
+    if not storage then
+        return nil
+    end
+    local file_name = storage.file_name
+    local file_name_len = string.len(file_name)
+    -- get file size
+    if not file_size or file_size <= 0 then
+        ngx.log(ngx.ERR, "fdfs: append file size nil")
+        return nil
+    end
+    local sock, err = ngx.socket.tcp()
+    if not sock then
+        return nil, err
+    end
+    if self.timeout then
+        sock:settimeout(self.timeout)
+    end
+    local ok, err = sock:connect(storage.host, storage.port)
+    if not ok then
+        return nil, err
+    end
+    -- send request
+    local out = {}
+    table.insert(out, long2buf(file_size + file_name_len + 16))
+    table.insert(out, string.char(STORAGE_PROTO_CMD_APPEND_FILE))
+    -- status
+    table.insert(out, "\00")
+    table.insert(out, long2buf(file_name_len))
+    table.insert(out, long2buf(file_size))
+    table.insert(out, file_name)
+    local bytes, err = sock:send(out)
+
+    -- send file data
+    local send_count = 0
+    chunk_size = chunk_size or 1024
+    while reader do
+        local chunk = reader(chunk_size)
+        if not chunk then
+            break
+        end
+        local bytes, err = sock:send(chunk)
+        if not bytes then
+            ngx.log(ngx.ngx.ERR, "fdfs: send body error")
+            sock:close()
+            ngx.exit(500)
+        end
+
+        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        send_count = send_count + bytes
+    end
+    if send_count ~= file_size then
+        -- send file not full
+        ngx.log(ngx.ERR, "fdfs: read file body not full, send: " .. send_count, " file size: " .. file_size)
+        sock:close()
+        ngx.exit(500)
+    end
+
+    -- read response
+    local res_hdr = read_fdfs_header(sock)
+    if res_hdr.status ~= 0 then
+        ngx.log(ngx.ngx.ERR, "fdfs: append file failed, status ", res_hdr.status)
+        ngx.exit(500)
+    end
+
+    local res = read_storage_result(sock, res_hdr)
+    local keepalive = self.storage_keepalive
+    if keepalive then
+        sock:setkeepalive(keepalive.timeout, keepalive.size)
+    end
+    return res_hdr
+end
+
 function do_append(self, fileid)
     local storage = self:query_update_storage(fileid)
     if not storage then
@@ -759,14 +1004,15 @@ function do_append(self, fileid)
     end
     -- send request
     local out = {}
-    table.insert(out, int2buf(file_size + file_name_len + 16))
+    table.insert(out, long2buf(file_size + file_name_len + 16))
     table.insert(out, string.char(STORAGE_PROTO_CMD_APPEND_FILE))
     -- status
     table.insert(out, "\00")
-    table.insert(out, int2buf(file_name_len))
-    table.insert(out, int2buf(file_size))
+    table.insert(out, long2buf(file_name_len))
+    table.insert(out, long2buf(file_size))
     table.insert(out, file_name)
     local bytes, err = sock:send(out)
+
     -- send file data
     local send_count = 0
     local req_sock, err = ngx.req.socket()
@@ -804,6 +1050,11 @@ function do_append(self, fileid)
     end
     -- read response
     local res_hdr = read_fdfs_header(sock)
+    if res_hdr.status ~= 0 then
+        ngx.log(ngx.ngx.ERR, "fdfs: append file failed, status ", res_hdr.status)
+        ngx.exit(500)
+    end
+
     local res = read_storage_result(sock, res_hdr)
     local keepalive = self.storage_keepalive
     if keepalive then
@@ -811,6 +1062,232 @@ function do_append(self, fileid)
     end
     return res_hdr
 end
+
+
+
+local function fdfs_get_server_id_type(id)
+    if id > 0 and id <= FDFS_MAX_SERVER_ID then
+       return FDFS_ID_TYPE_SERVER_ID
+    else
+        return FDFS_ID_TYPE_IP_ADDRESS
+    end
+end
+
+local function IS_TRUNK_FILE(file_size)
+    ngx.log(ngx.ERR, "trunkfile:", file_size, ":", FDFS_TRUNK_FILE_MARK_SIZE)
+    ngx.log(ngx.ERR, "bit.band: ", bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE))
+    return bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE) ~= 0
+end
+
+local function IS_SLAVE_FILE(filename_len, file_size)
+    ngx.log(ngx.ERR, "slave file: ", filename_len, ":",file_size )
+    return ((filename_len > FDFS_TRUNK_LOGIC_FILENAME_LENGTH) or
+    (filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(file_size)))
+end
+
+local function IS_APPENDER_FILE(file_size)
+
+    ngx.log(ngx.ERR, "append filesize: ",  file_size, ":",  FDFS_APPENDER_FILE_SIZE)
+    return (bit.band(file_size, FDFS_APPENDER_FILE_SIZE) ~=0 )
+end
+
+function get_fileinfo(fileid, get_from_server)
+    ngx.log(ngx.ERR, "fileid type:", type(fileid))
+    fileid = utils.clear_slash(fileid)
+    fileid = utils.trim_prefix_slash(fileid)
+    fileid = utils.trim_suffix_slash(fileid)
+    local segments = utils.split(fileid, "/")
+    local group = segments[1]
+    local filename = segments[5]
+    local filename_len = string.len(filename)
+    ngx.log(ngx.ERR, "filename:", filename, " filename_len:", filename_len)
+    if filename_len < FDFS_FILENAME_BASE64_LENGTH then
+        ngx.log(ngx.ERR, string.format("filename is to short %d < %d",
+                filename_len, FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1))
+        return nil
+    end
+
+    local offset = 1
+    filename = base64.decode(filename)
+    local ip_addr = string.sub(filename, 1, 4)
+    offset = offset + 4
+    local ip_addr_num = iputils.ntohl(buf2int(ip_addr))
+    ngx.log(ngx.ERR, "ip_addr_str:", ip_addr, " num:", ip_addr_num)
+
+    local source_ip_addr = ""
+    local source_id = ""
+    if fdfs_get_server_id_type(ip_addr_num) == FDFS_ID_TYPE_SERVER_ID then
+        source_id = ip_addr_num
+    else
+        source_ip_addr = iputils.inet_ntoa(iputils.ntohl(ip_addr_num))
+    end
+
+    local timestamp_str = string.sub(filename, offset, offset+4)
+    offset = offset + 4
+    local timestamp = buf2int(timestamp_str)
+    ngx.log(ngx.ERR, "timestamp_str:", timestamp_str, " num:", timestamp)
+
+    local filesize_str_1 = string.sub(filename, offset, offset+4)
+    offset = offset + 4
+
+    local filesize_str_2 = string.sub(filename, offset, offset+4)
+    offset = offset + 4
+
+    ngx.log(ngx.ERR, "filesize to int")
+    local filesize_1 = buf2int(filesize_str_1)
+    local filesize_2 = buf2int(filesize_str_2)
+    local filesize = filesize_2
+    ngx.log(ngx.ERR, "filesize str1:" , filesize_str_1 , " num:" .. filesize_1 ..
+        " str2:" , filesize_str_2 ,  "num2" , filesize_2 , " filesize :", filesize)
+
+    local is_slave = IS_SLAVE_FILE(filename_len, filesize_1)
+    local is_appender = IS_APPENDER_FILE(filesize_1)
+    if ( is_slave or is_appender or get_from_server) then
+        ngx.log(ngx.ERR, "IS A appender FILE")
+        filesize = -1
+    end
+
+    ngx.log(ngx.ERR, "filesize :" , filesize)
+    local is_trunk = IS_TRUNK_FILE(filesize_1)
+    if bit.arshift(filesize, 63) ~= 0 then
+        filesize = bit.band(filesize, 0xFFFFFFFF) -- low 32 bits is file size
+    elseif is_trunk then
+        ngx.log(ngx.ERR, "IS A TRUNCK FILE")
+        filesize = bit.band(filesize,0xFFFFFFFF)
+    end
+
+    ngx.log(ngx.ERR, "filesize :" , filesize)
+
+    local crc32 = buf2int(string.sub(filename, offset, offset+4))
+
+    local fileinfo = {
+        source_id = source_id,
+        source_ip_addr = source_ip_addr,
+        is_trunk = is_trunk,
+        is_appender = is_appender,
+        is_slave = is_slave,
+        timestamp = timestamp,
+        crc32 = crc32,
+        filesize = filesize
+    }
+    return fileinfo
+end
+
+-- build request
+local function build_request(cmd, group_name, file_name)
+    if not group_name then
+        return nil, "not group_name"
+    end
+    if not file_name then
+        return nil, "not file_name"
+    end
+    local req = {}
+    table.insert(req, int2buf(16 + string.len(file_name)))
+    table.insert(req, string.char(cmd))
+    table.insert(req, "\00")
+    table.insert(req, fix_string(group_name, 16))
+    table.insert(req, file_name)
+    return req
+end
+
+
+local function read_file_info_result(sock)
+    local sock = sock
+    if not sock then
+        ngx.log(ngx.ERR, "read file info sock nil ")
+        return nil, "not initialized"
+    end
+    local hdr, err = read_fdfs_header(sock)
+    if not hdr then
+        ngx.log(ngx.ERR, "read  header error")
+        return nil, "read storage header error:" .. err
+    end
+    if hdr.status ~= 0 then
+        ngx.log(ngx.ERR, "read  header status error: " .. hdr.status)
+        return nil, "read storage status error:" .. hdr.status
+    end
+    if hdr.len > 0 then
+        local data, err, partial = sock:receive(hdr.len)
+        if not data then
+            return nil, "read file body error:" .. err
+        end
+        ngx.log(ngx.ERR, "read data: " .. data, " len:", hdr.len)
+
+        local offset = 1
+        local filesize_str = string.sub(data, offset, offset+8)
+        offset = offset + 8
+        local filesize = buf2long(filesize_str)
+
+        local timestamp_str = string.sub(data, offset, offset+8)
+        offset = offset + 8
+        local timestamp = buf2long(timestamp_str)
+
+        local crc32_str = string.sub(data, offset, offset+8)
+        offset = offset + 8
+        local crc32 = buf2long(crc32_str)
+
+        local source_ip_addr = strip_string(string.sub(data, offset))
+
+        local fileinfo = {
+            source_ip_addr = source_ip_addr,
+            timestamp = timestamp,
+            crc32 = crc32,
+            filesize = filesize
+        }
+        return fileinfo
+    else
+        ngx.log(ngx.ERR, "read  header len: " .. hdr.len)
+    end
+    return nil
+end
+
+function get_fileinfo_from_storage(self, fileid)
+    ngx.log(ngx.ERR, "get fileinfo from storage start~~~" )
+    local storage, err = self:query_update_storage(fileid)
+    if not storage then
+        return nil, err
+    end
+    for k,v in pairs(storage) do
+        ngx.log(ngx.ERR, k .. "=", v)
+    end
+    local req, err = build_request(STORAGE_PROTO_CMD_QUERY_FILE_INFO, storage.group_name, storage.file_name)
+    if not req then
+        return nil, err
+    end
+
+    local sock, err = ngx.socket.tcp()
+    if not sock then
+        return nil, err
+    end
+    if self.timeout then
+        sock:settimeout(self.timeout)
+    end
+
+    local ok, err = sock:connect(storage.host, storage.port)
+    if not ok then
+        ngx.log(ngx.ERR, "fdfs: connect failed: " .. err)
+        return nil, err
+    end
+
+    local bytes, err = sock:send(req)
+
+    if not bytes then
+        ngx.log(ngx.ERR, "fdfs: send request error" .. err)
+        sock:close()
+        ngx.exit(500)
+    end
+
+    local res = read_file_info_result(sock)
+
+    local keepalive = self.storage_keepalive
+    if keepalive then
+        sock:setkeepalive(keepalive.timeout, keepalive.size)
+    end
+
+    return res
+
+end
+
 
 -- _M.query_upload_storage = query_upload_storage
 -- _M.do_upload_storage    = do_upload_storage

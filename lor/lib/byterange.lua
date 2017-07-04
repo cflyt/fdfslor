@@ -24,6 +24,14 @@ local function _is_content_range_valid(start, stop, length, response)
     end
 end
 
+--- 去除字符串收尾空格
+----
+---- @param string str
+---- @return string
+function _trim(str)
+    return str or (string.gsub(str, "^%s*(.-)%s*$", "%1"))
+end
+
 
 local ContentRange = {}
 
@@ -48,6 +56,9 @@ function ContentRange:new(start, stop, length)
     {
         __index = self,
         __tostring = function(self)
+                if not self then
+                    return ""
+                end
                 local length = 0
                 if not self.length then
                     length = '*'
@@ -56,10 +67,9 @@ function ContentRange:new(start, stop, length)
                 end
 
                 if not self.start then
-                    if not self.stop then
-                        error(string.format("Bad Range stop nil" ))
+                    if self.stop then
+                        return string.format("bytes */%s" , length)
                     end
-                    return string.format("bytes */%s" , length)
                 end
 
                 local stop = self.stop - 1 --  from non-inclusive to HTTP-style
@@ -89,9 +99,7 @@ end
 local Range= {}
 
 function Range:new(start, stop)
-    if not stop  or stop < 0 then
-        logger(LOG_ERR, "Bad range stop : " .. stop)
-    end
+    assert( not stop or stop > 0, "Bad range stop : " .. (stop or "nil"))
     local instance = {
         start = start,
         stop = stop
@@ -162,6 +170,15 @@ function Range:parse(header)
    --     Parse the header; may return None if header is invalid
     local header = header or ""
     local start, stop = string.match(header, _rx_range)
+    ngx.log(ngx.ERR, "start ", start, "stop ", stop)
+    start = _trim(start)
+    stop = _trim(stop)
+    if start == "" then
+        start = nil
+    end
+    if stop == "" then
+        stop = nil
+    end
     if not start and not stop then
         return nil
     end

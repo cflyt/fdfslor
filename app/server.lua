@@ -37,6 +37,7 @@ app:erroruse(function(err, req, res, next)
 
     if req:is_found() ~= true then
         if string_find(req.headers["Accept"], "application/json") then
+            ngx.log(ngx.ERR, "i am bbbbbbbbb")
             res:status(404):json({
                 success = false,
                 msg = "404! sorry, not found."

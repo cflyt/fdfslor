@@ -69,17 +69,26 @@ end
 function Request:new()
     local headers = ngx.req.get_headers()
     local length = tonumber(headers["Content-Length"])
-    ngx.log(ngx.ERR, 'header:', headers["Range"])
+    ngx.log(ngx.ERR, 'header range:', headers["Range"])
+    local range = nil
+    if headers["Range"] then
+        range = Range:parse(headers["Range"])
+    end
+
+    local content_type = ngx.var.content_type
+    if not content_type then
+        content_type = "application/x-www-form-urlencoded"
+    end
     local instance = {
         path = ngx.var.uri, -- uri
         method = ngx.req.get_method(),
         params = {},
         uri = ngx.var.request_uri,
-        content_type = ngx.var.content_type,
+        content_type = content_type,
         headers = headers, -- request headers
         content_length = length,
         version = ngx.req.http_version(),
-        range = Range:parse(headers["Range"]),
+        range = range,
         -- uri_args = ngx.var.args,
         body_read = false,
         found = false -- 404 or not

@@ -143,6 +143,15 @@ function _M:make_reader(data, chunk_size, total_size, cb_done)
 end
 
 
+--- 去除字符串收尾空格
+----
+---- @param string str
+---- @return string
+function _M:trim(str)
+    return (string.gsub(str, "^%s*(.-)%s*$", "%1"))
+end
+
+
 function _M:dump(o)
    if type(o) == 'table' then
       local s = '{ '
