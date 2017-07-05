@@ -28,7 +28,7 @@ end
 ----
 ---- @param string str
 ---- @return string
-function _trim(str)
+local function _trim(str)
     return str or (string.gsub(str, "^%s*(.-)%s*$", "%1"))
 end
 

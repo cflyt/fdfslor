@@ -30,7 +30,7 @@ local function co_wrap(func)
     end
 end
 
-function _M:make_reader(data, chunk_size, total_size, cb_done)
+function _M.make_reader(data, chunk_size, total_size, cb_done)
     if type(data) == "string" then
         return co_wrap(function(chunk_size, total_size)
             local remain_length = total_size or slen(data)
@@ -147,12 +147,12 @@ end
 ----
 ---- @param string str
 ---- @return string
-function _M:trim(str)
+function _M.trim(str)
     return (string.gsub(str, "^%s*(.-)%s*$", "%1"))
 end
 
 
-function _M:dump(o)
+function _M.dump(o)
    if type(o) == 'table' then
       local s = '{ '
       for k,v in pairs(o) do

@@ -3,13 +3,7 @@ local bit  = bit
 local string = string
 local setmetatable = setmetatable
 
-module(...)
-
-local mt = { __index = _M }
-
-function new(self)
-    return setmetatable({}, mt)
-end
+local _M = {}
 
 --- Test whether the current system is operating in big endian mode.
 -- @return  Boolean value indicating whether system is big endian
@@ -18,16 +12,16 @@ local function bigendian()
 end
 
 --- Boolean; true if system is little endian
-LITTLE_ENDIAN = not bigendian()
+_M.LITTLE_ENDIAN = not bigendian()
 
 --- Boolean; true if system is big endian
-BIG_ENDIAN    = not LITTLE_ENDIAN
+_M.BIG_ENDIAN    = not LITTLE_ENDIAN
 
 --- Specifier for IPv4 address family
-FAMILY_INET4  = 0x04
+_M.FAMILY_INET4  = 0x04
 
 --- Specifier for IPv6 address family
-FAMILY_INET6  = 0x06
+_M.FAMILY_INET6  = 0x06
 
 
 local function __array16( x, family )
@@ -78,7 +72,7 @@ end
 -- @return  Byte-swapped value
 -- @see     htonl
 -- @see     ntohs
-function htons(x)
+function _M.htons(x)
     if LITTLE_ENDIAN then
         return bit.bor(
             bit.rshift( x, 8 ),
@@ -94,7 +88,7 @@ end
 -- @return  Byte-swapped value
 -- @see     htons
 -- @see     ntohl
-function htonl(x)
+function _M.htonl(x)
     if LITTLE_ENDIAN then
         return bit.bor(
             bit.lshift( htons( bit.band( x, 0xFFFF ) ), 16 ),
@@ -112,7 +106,7 @@ end
 -- @return  Byte-swapped value
 -- @see     htonl
 -- @see     ntohs
-ntohs = htons
+_M.ntohs = _M.htons
 
 --- Convert given short value to host byte order on little endian hosts
 -- @class   function
@@ -121,9 +115,9 @@ ntohs = htons
 -- @return  Byte-swapped value
 -- @see     htons
 -- @see     ntohl
-ntohl = htonl
+_M.ntohl = _M.htonl
 
-function inet_ntoa(n)
+function _M.inet_ntoa(n)
      return string.format("%d.%d.%d.%d", bit.band(bit.rshift(n, 24), 0xff),
                     bit.band(bit.rshift(n, 16), 0xff),
                     bit.band(bit.rshift(n, 8), 0xff),
@@ -131,5 +125,4 @@ function inet_ntoa(n)
 end
 
 
-
-setmetatable(_M, class_mt)
+return _M

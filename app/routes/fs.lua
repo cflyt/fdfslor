@@ -28,7 +28,7 @@ fsRouter:post("/new/", function(req, res, next)
             file:seek("set", 0)
             filesize = file:seek("end")
             file:seek("set", 0)
-            reader = utils:make_reader(file, default_chunk_size)
+            reader = utils.make_reader(file, default_chunk_size)
         end
     else
         reader = req:body_reader(default_chunk_size)
@@ -47,14 +47,14 @@ fsRouter:post("/new/", function(req, res, next)
     end
 
     args["fileid"] = fileid
-    ngx.log(ngx.ERR, utils:dump(args))
+    ngx.log(ngx.ERR, utils.dump(args))
     local isOk,ip,now,createTime,realUrl,isTrunkFile = fsinfo.getFileinfo(fileid)
     args['storage_ip'] = ip
     args['create_time'] = createTime
     args['real_url'] = realUrl
     args['isTrunkFile'] = isTrunkFile
-    res:set_header("Content-Length", string.len(utils:dump(args)))
-    res:send(utils:dump(args))
+    res:set_header("Content-Length", string.len(utils.dump(args)))
+    res:send(utils.dump(args))
     --res:json({
     --    success = true,
     --    data = args
@@ -99,7 +99,7 @@ fsRouter:post("/appender/", function(req, res, next)
             file:seek("set", 0)
             filesize = file:seek("end")
             file:seek("set", 0)
-            reader = utils:make_reader(file, default_chunk_size)
+            reader = utils.make_reader(file, default_chunk_size)
         end
     else
         reader = req:body_reader(default_chunk_size)
@@ -119,14 +119,14 @@ fsRouter:post("/appender/", function(req, res, next)
     end
 
     args["fileid"] = fileid
-    -- ngx.log(ngx.ERR, utils:dump(args))
+    -- ngx.log(ngx.ERR, utils.dump(args))
     local isOk,ip,now,createTime,realUrl,isTrunkFile = fsinfo.getFileinfo(fileid)
     args['storage_ip'] = ip
     args['create_time'] = createTime
     args['real_url'] = realUrl
     args['isTrunkFile'] = isTrunkFile
-    res:set_header("Content-Length", string.len(utils:dump(args)))
-    res:send(utils:dump(args))
+    res:set_header("Content-Length", string.len(utils.dump(args)))
+    res:send(utils.dump(args))
     --res:json({
     --    success = true,
     --    data = args
@@ -147,7 +147,7 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
             file:seek("set", 0)
             filesize = file:seek("end")
             file:seek("set", 0)
-            reader = utils:make_reader(file, default_chunk_size)
+            reader = utils.make_reader(file, default_chunk_size)
         end
     else
         reader = req:body_reader(default_chunk_size)
@@ -161,13 +161,13 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
         --ngx.say("ERR: " .. (err or "append failed"))
         ngx.exit(500)
     elseif re then
-        res:set_header("Content-Length", string.len(utils:dump(re)))
-        res:send(utils:dump(re))
+        res:set_header("Content-Length", string.len(utils.dump(re)))
+        res:send(utils.dump(re))
     else
         ngx.exit(406)
     end
 
-    -- ngx.log(ngx.ERR, utils:dump(args))
+    -- ngx.log(ngx.ERR, utils.dump(args))
     --res:json({
     --    success = true,
     --    data = args
@@ -184,8 +184,6 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     -- ngx.say(req.params.filename)
     -- ngx.say(type(ngx.socket.tcp()))
     ngx.log(ngx.ERR, tostring(req.range))
-    local aa = fdfs.int2buf(2)
-    local bb = fdfs.long2buf(2)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     ngx.log(ngx.ERR, "fileid:".. fileid)
     local start, stop = 0, 0
@@ -195,7 +193,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     end
     local reader, len = fdfs:do_download2(fileid, start, stop)
     if not reader then
-        return res.status(500).send("can not read")
+        return res:status(500):send("can not read")
     end
     res:set_header("Content-Length", len)
     if req.range then
@@ -219,7 +217,7 @@ end)
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
-    local fileinfo = fdfs.get_fileinfo(fileid)
+    local fileinfo = fdfs:get_fileinfo(fileid)
     -- local fileinfo = fdfs:get_fileinfo_from_storage(fileid)
     if fileinfo then
         res:status(200)

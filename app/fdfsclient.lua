@@ -17,9 +17,6 @@ local pairs = pairs
 local tostring = tostring
 
 
-
-module(...)
-
 local VERSION = '0.1'
 
 local FDFS_PROTO_PKG_LEN_SIZE = 8
@@ -100,9 +97,10 @@ local function IS_UPPER_HEX(ch)
     return ((ch >= '0' and ch <= '9') or (ch >= 'A' and ch <= 'F'))
 end
 
+local _M = {}
 local mt = { __index = _M }
 
-function dump(o)
+local function dump(o)
    if type(o) == 'table' then
       local s = '{ '
       for k,v in pairs(o) do
@@ -116,45 +114,45 @@ function dump(o)
 end
 
 
-function new(self)
+function _M.new(self)
     return setmetatable({}, mt)
 end
 
-function set_tracker(self, host, port)
+function _M.set_tracker(self, host, port)
     local tracker = {host = host, port = port}
     self.tracker = tracker
 end
 
-function set_timeout(self, timeout)
+function _M.set_timeout(self, timeout)
     if timeout then
         self.timeout = timeout
     end
 end
 
-function set_tracker_keepalive(self, timeout, size)
+function _M.set_tracker_keepalive(self, timeout, size)
     local keepalive = {timeout = timeout, size = size}
     self.tracker_keepalive = keepalive
 end
 
-function set_storage_keepalive(self, timeout, size)
+function _M.set_storage_keepalive(self, timeout, size)
     local keepalive = {timeout = timeout, size = size}
     self.storage_keepalive = keepalive
 end
 
-function int2buf(n)
+local function int2buf(n)
     ngx.log(ngx.ERR,  string.format("%d:%d:%d:%d", bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff)))
     return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
     --return string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
 end
 
-function buf2int(buf)
+local function buf2int(buf)
     -- local c1, c2, c3, c4 = string.byte(buf, 5, 8)
     local c1, c2, c3, c4 = string.byte(buf, 1, 4)
     ngx.log(ngx.ERR,  "buf2int:", string.format("%d:%d:%d:%d", c1,c2,c3,c4))
     return bit.bor(bit.lshift(c1, 24), bit.lshift(c2, 16),bit.lshift(c3, 8), c4)
 end
 
-function long2buf(n)
+local function long2buf(n)
     return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
 
     --return string.char(bit.band(bit.rshift(n, 56), 0xff),
@@ -182,7 +180,7 @@ function buf2long(buf)
 end
 
 
-function read_fdfs_header(sock)
+local function read_fdfs_header(sock)
     local header = {}
     local buf, err = sock:receive(10)
     if not buf then
@@ -197,7 +195,7 @@ function read_fdfs_header(sock)
     return header
 end
 
-function fix_string(str, fix_length)
+local function fix_string(str, fix_length)
     if not str then
         str = ""
     end
@@ -212,7 +210,7 @@ function fix_string(str, fix_length)
     return fix_str
 end
 
-function strip_string(str)
+local function strip_string(str)
     local pos = string.find(str, "\00")
     if pos then
         return string.sub(str, 1, pos - 1)
@@ -221,7 +219,7 @@ function strip_string(str)
     end
 end
 
-function get_ext_name(filename)
+local function get_ext_name(filename)
     local extname = filename:match("%.(%w+)$")
     if extname then
         return fix_string(extname, FDFS_FILE_EXT_NAME_MAX_LEN)
@@ -230,7 +228,7 @@ function get_ext_name(filename)
     end
 end
 
-function read_tracket_result(sock, header)
+local function read_tracket_result(sock, header)
     if header.len > 0 then
         local res = {}
         local buf = sock:receive(header.len)
@@ -245,7 +243,7 @@ function read_tracket_result(sock, header)
     end
 end
 
-function read_storage_result(sock, header)
+local function read_storage_result(sock, header)
     if header.len > 0 then
         local res = {}
         local buf = sock:receive(header.len)
@@ -257,7 +255,7 @@ function read_storage_result(sock, header)
     end
 end
 
-function query_upload_storage(self, group_name)
+function _M.query_upload_storage(self, group_name)
     local tracker = self.tracker
     if not tracker then
         return nil
@@ -309,7 +307,7 @@ function query_upload_storage(self, group_name)
     return res
 end
 
-function do_upload_appender(self, ext_name)
+function _M.do_upload_appender(self, ext_name)
     local storage = self:query_upload_storage()
     if not storage then
         return nil
@@ -392,7 +390,7 @@ function do_upload_appender(self, ext_name)
     return res
 end
 
-function do_upload_appender2(self, reader, filesize, ext_name, chunk_size)
+function _M.do_upload_appender2(self, reader, filesize, ext_name, chunk_size)
     local storage = self:query_upload_storage()
     if not storage then
         return nil
@@ -461,7 +459,7 @@ function do_upload_appender2(self, reader, filesize, ext_name, chunk_size)
     return res
 end
 
-function do_upload2(self, reader, file_size, ext_name, chunk_size)
+function _M.do_upload2(self, reader, file_size, ext_name, chunk_size)
     if not chunk_size then
         chunk_size = 1024
     end
@@ -553,7 +551,7 @@ function do_upload2(self, reader, file_size, ext_name, chunk_size)
 
 end
 
-function do_upload(self, ext_name)
+function _M.do_upload(self, ext_name)
     local storage = self:query_upload_storage()
     if not storage then
         return nil
@@ -636,7 +634,7 @@ function do_upload(self, ext_name)
     return res
 end
 
-function query_update_storage_ex(self, group_name, file_name)
+function _M.query_update_storage_ex(self, group_name, file_name)
     local out = {}
     -- package length
     table.insert(out, long2buf(16 + string.len(file_name)))
@@ -680,7 +678,7 @@ function query_update_storage_ex(self, group_name, file_name)
     return res
 end
 
-function query_update_storage(self, fileid)
+function _M.query_update_storage(self, fileid)
     local pos = fileid:find('/')
     if not pos then
         return nil
@@ -695,7 +693,7 @@ function query_update_storage(self, fileid)
     end
 end
 
-function do_delete(self, fileid)
+function _M.do_delete(self, fileid)
     local storage = self:query_update_storage(fileid)
     if not storage then
         return nil
@@ -733,7 +731,7 @@ function do_delete(self, fileid)
     return hdr
 end
 
-function query_download_storage(self, fileid)
+function _M.query_download_storage(self, fileid)
     local pos = fileid:find('/')
     if not pos then
         return nil
@@ -746,7 +744,7 @@ function query_download_storage(self, fileid)
     end
 end
 
-function query_download_storage_ex(self, group_name, file_name)
+function _M.query_download_storage_ex(self, group_name, file_name)
     local out = {}
     -- package length
     table.insert(out, long2buf(16 + string.len(file_name)))
@@ -790,7 +788,7 @@ function query_download_storage_ex(self, group_name, file_name)
     return res
 end
 
-function do_download2(self, fileid, start, stop)
+function _M.do_download2(self, fileid, start, stop)
     local storage = self:query_download_storage(fileid)
     if not storage then
         return nil
@@ -838,7 +836,7 @@ function do_download2(self, fileid, start, stop)
         sock:setkeepalive(keepalive.timeout, keepalive.size)
     end
 
-    return utils:make_reader(sock), hdr.len
+    return utils.make_reader(sock), hdr.len
 
     -- read request bodya
      -- local data, partial
@@ -854,7 +852,7 @@ function do_download2(self, fileid, start, stop)
 end
 
 
-function do_download(self, fileid)
+function _M.do_download(self, fileid)
     local storage = self:query_download_storage(fileid)
     if not storage then
         return nil
@@ -905,7 +903,7 @@ function do_download(self, fileid)
     return data
 end
 
-function do_append2(self, fileid, reader, file_size, chunk_size )
+function _M.do_append2(self, fileid, reader, file_size, chunk_size )
     local storage = self:query_update_storage(fileid)
     if not storage then
         return nil
@@ -979,7 +977,7 @@ function do_append2(self, fileid, reader, file_size, chunk_size )
     return res_hdr
 end
 
-function do_append(self, fileid)
+function _M.do_append(self, fileid)
     local storage = self:query_update_storage(fileid)
     if not storage then
         return nil
@@ -1091,7 +1089,7 @@ local function IS_APPENDER_FILE(file_size)
     return (bit.band(file_size, FDFS_APPENDER_FILE_SIZE) ~=0 )
 end
 
-function get_fileinfo(fileid, get_from_server)
+function _M.get_fileinfo(self, fileid, get_from_server)
     ngx.log(ngx.ERR, "fileid type:", type(fileid))
     fileid = utils.clear_slash(fileid)
     fileid = utils.trim_prefix_slash(fileid)
@@ -1241,7 +1239,7 @@ local function read_file_info_result(sock)
     return nil
 end
 
-function get_fileinfo_from_storage(self, fileid)
+function _M.get_fileinfo_from_storage(self, fileid)
     ngx.log(ngx.ERR, "get fileinfo from storage start~~~" )
     local storage, err = self:query_update_storage(fileid)
     if not storage then
@@ -1301,3 +1299,4 @@ local class_mt = {
 }
 
 setmetatable(_M, class_mt)
+return _M
