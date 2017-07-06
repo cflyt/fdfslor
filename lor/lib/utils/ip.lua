@@ -12,59 +12,16 @@ local function bigendian()
 end
 
 --- Boolean; true if system is little endian
-_M.LITTLE_ENDIAN = not bigendian()
+local LITTLE_ENDIAN = not bigendian()
 
 --- Boolean; true if system is big endian
-_M.BIG_ENDIAN    = not LITTLE_ENDIAN
+local BIG_ENDIAN    = not LITTLE_ENDIAN
 
 --- Specifier for IPv4 address family
-_M.FAMILY_INET4  = 0x04
+local FAMILY_INET4  = 0x04
 
 --- Specifier for IPv6 address family
-_M.FAMILY_INET6  = 0x06
-
-
-local function __array16( x, family )
-    local list
-
-    if type(x) == "number" then
-        list = { bit.rshift(x, 16), bit.band(x, 0xFFFF) }
-
-    elseif type(x) == "string" then
-        if x:find(":") then x = IPv6(x) else x = IPv4(x) end
-        if x then
-            assert( x[1] == family, "Can't mix IPv4 and IPv6 addresses" )
-            list = { unpack(x[2]) }
-        end
-
-    elseif type(x) == "table" and type(x[2]) == "table" then
-        assert( x[1] == family, "Can't mix IPv4 and IPv6 addresses" )
-        list = { unpack(x[2]) }
-
-    elseif type(x) == "table" then
-        list = { unpack(x) }
-    end
-
-    assert( list, "Invalid operand" )
-
-    return list
-end
-
-local function __mask16(bits)
-    return bit.lshift( bit.rshift( 0xFFFF, 16 - bits % 16 ), 16 - bits % 16 )
-end
-
-local function __not16(bits)
-    return bit.band( bit.bnot( __mask16(bits) ), 0xFFFF )
-end
-
-local function __maxlen(family)
-    return ( family == FAMILY_INET4 ) and 32 or 128
-end
-
-local function __sublen(family)
-    return ( family == FAMILY_INET4 ) and 30 or 127
-end
+local FAMILY_INET6  = 0x06
 
 
 --- Convert given short value to network byte order on little endian hosts
@@ -74,6 +31,7 @@ end
 -- @see     ntohs
 function _M.htons(x)
     if LITTLE_ENDIAN then
+        ngx.log(ngx.ERR, " little, endian ")
         return bit.bor(
             bit.rshift( x, 8 ),
             bit.band( bit.lshift( x, 8 ), 0xFF00 )
@@ -91,8 +49,8 @@ end
 function _M.htonl(x)
     if LITTLE_ENDIAN then
         return bit.bor(
-            bit.lshift( htons( bit.band( x, 0xFFFF ) ), 16 ),
-            htons( bit.rshift( x, 16 ) )
+            bit.lshift( _M.htons( bit.band( x, 0xFFFF ) ), 16 ),
+            _M.htons( bit.rshift( x, 16 ) )
         )
     else
         return x
