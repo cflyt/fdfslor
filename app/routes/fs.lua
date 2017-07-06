@@ -185,12 +185,13 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     -- ngx.say(type(ngx.socket.tcp()))
     ngx.log(ngx.ERR, tostring(req.range))
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
-    ngx.log(ngx.ERR, "fileid:".. fileid)
     local start, stop = 0, 0
     if req.range then
         start = req.range.start
         stop = req.range.stop
     end
+    local fileinfo = fdfs:get_fileinfo(fileid)
+    local filesize = fileinfo.filesize
     local reader, len = fdfs:do_download2(fileid, start, stop)
     if not reader then
         return res:status(500):send("can not read")
@@ -198,9 +199,11 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     res:set_header("Content-Length", len)
     if req.range then
         req.range.stop = req.range.start + len
-        res:set_header("Content-Range", tostring(req.range:content_range(nil)))
+        res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+        res:status(206)
+    else
+        res:status(200)
     end
-    res:status(200)
     if len == 0 then
         ngx.eof()
     else
@@ -210,7 +213,9 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 break
             end
             res:send(chunk)
+            ngx.flush(true)
         end
+        ngx.eof()
     end
 
 end)

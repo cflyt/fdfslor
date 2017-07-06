@@ -140,7 +140,7 @@ function _M.set_storage_keepalive(self, timeout, size)
 end
 
 local function int2buf(n)
-    ngx.log(ngx.ERR,  string.format("%d:%d:%d:%d", bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff)))
+    -- ngx.log(ngx.ERR,  string.format("%d:%d:%d:%d", bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff)))
     return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
     --return string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
 end
@@ -148,7 +148,7 @@ end
 local function buf2int(buf)
     -- local c1, c2, c3, c4 = string.byte(buf, 5, 8)
     local c1, c2, c3, c4 = string.byte(buf, 1, 4)
-    ngx.log(ngx.ERR,  "buf2int:", string.format("%d:%d:%d:%d", c1,c2,c3,c4))
+    -- ngx.log(ngx.ERR,  "buf2int:", string.format("%d:%d:%d:%d", c1,c2,c3,c4))
     return bit.bor(bit.lshift(c1, 24), bit.lshift(c2, 16),bit.lshift(c3, 8), c4)
 end
 
@@ -828,27 +828,35 @@ function _M.do_download2(self, fileid, start, stop)
         sock:close()
         ngx.exit(500)
     end
+
     -- read request header
     local hdr = read_fdfs_header(sock)
     ngx.log(ngx.ERR, "hdr: ", hdr.len)
-    local keepalive = self.storage_keepalive
-    if keepalive then
-        sock:setkeepalive(keepalive.timeout, keepalive.size)
-    end
 
-    return utils.make_reader(sock), hdr.len
+    --local keepalive = self.storage_keepalive
+    --if keepalive then
+    --    sock:setkeepalive(keepalive.timeout, keepalive.size)
+    --end
+    --
+    local chunk_size = 1024 * 64
+    return utils.make_reader(sock, chunk_size, hdr.len, function(sock)
+        local keepalive = self.storage_keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+    end), hdr.len
 
     -- read request bodya
-     -- local data, partial
-     -- if hdr.len > 0 then
-     --     data, err, partial = sock:receive(hdr.len)
-     --     if not data then
-     --         ngx.log(ngx.ERR, "read file body error:" .. err)
-     --         sock:close()
-     --         ngx.exit(500)
-     --     end
-     -- end
-    -- return data
+     --local data, partial
+     --if hdr.len > 0 then
+     --    data, err, partial = sock:receive(hdr.len)
+     --    if not data then
+     --        ngx.log(ngx.ERR, "read file body error:" .. err)
+     --        sock:close()
+     --        ngx.exit(500)
+     --    end
+     --end
+     --return data, hdr.len
 end
 
 
@@ -1072,25 +1080,25 @@ local function fdfs_get_server_id_type(id)
 end
 
 local function IS_TRUNK_FILE(file_size)
-    ngx.log(ngx.ERR, "trunkfile:", file_size, ":", FDFS_TRUNK_FILE_MARK_SIZE)
-    ngx.log(ngx.ERR, "bit.band: ", bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE))
+    --ngx.log(ngx.ERR, "trunkfile:", file_size, ":", FDFS_TRUNK_FILE_MARK_SIZE)
+    -- ngx.log(ngx.ERR, "bit.band: ", bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE))
     return bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE) ~= 0
 end
 
 local function IS_SLAVE_FILE(filename_len, file_size)
-    ngx.log(ngx.ERR, "slave file: ", filename_len, ":",file_size )
+    -- ngx.log(ngx.ERR, "slave file: ", filename_len, ":",file_size )
     return ((filename_len > FDFS_TRUNK_LOGIC_FILENAME_LENGTH) or
     (filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(file_size)))
 end
 
 local function IS_APPENDER_FILE(file_size)
 
-    ngx.log(ngx.ERR, "append filesize: ",  file_size, ":",  FDFS_APPENDER_FILE_SIZE)
+     --ngx.log(ngx.ERR, "append filesize: ",  file_size, ":",  FDFS_APPENDER_FILE_SIZE)
     return (bit.band(file_size, FDFS_APPENDER_FILE_SIZE) ~=0 )
 end
 
 function _M.get_fileinfo(self, fileid, get_from_server)
-    ngx.log(ngx.ERR, "fileid type:", type(fileid))
+    -- ngx.log(ngx.ERR, "fileid type:", type(fileid))
     fileid = utils.clear_slash(fileid)
     fileid = utils.trim_prefix_slash(fileid)
     fileid = utils.trim_suffix_slash(fileid)
@@ -1098,7 +1106,7 @@ function _M.get_fileinfo(self, fileid, get_from_server)
     local group = segments[1]
     local filename = segments[5]
     local filename_len = string.len(filename)
-    ngx.log(ngx.ERR, "filename:", filename, " filename_len:", filename_len)
+    --ngx.log(ngx.ERR, "filename:", filename, " filename_len:", filename_len)
     if filename_len < FDFS_FILENAME_BASE64_LENGTH then
         ngx.log(ngx.ERR, string.format("filename is to short %d < %d",
                 filename_len, FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1))
@@ -1110,7 +1118,7 @@ function _M.get_fileinfo(self, fileid, get_from_server)
     local ip_addr = string.sub(filename, 1, 4)
     offset = offset + 4
     local ip_addr_num = iputils.ntohl(buf2int(ip_addr))
-    ngx.log(ngx.ERR, "ip_addr_str:", ip_addr, " num:", ip_addr_num)
+    -- ngx.log(ngx.ERR, "ip_addr_str:", ip_addr, " num:", ip_addr_num)
 
     local source_ip_addr = ""
     local source_id = ""
@@ -1123,7 +1131,7 @@ function _M.get_fileinfo(self, fileid, get_from_server)
     local timestamp_str = string.sub(filename, offset, offset+4)
     offset = offset + 4
     local timestamp = buf2int(timestamp_str)
-    ngx.log(ngx.ERR, "timestamp_str:", timestamp_str, " num:", timestamp)
+    -- ngx.log(ngx.ERR, "timestamp_str:", timestamp_str, " num:", timestamp)
 
     local filesize_str_1 = string.sub(filename, offset, offset+4)
     offset = offset + 4
@@ -1131,26 +1139,23 @@ function _M.get_fileinfo(self, fileid, get_from_server)
     local filesize_str_2 = string.sub(filename, offset, offset+4)
     offset = offset + 4
 
-    ngx.log(ngx.ERR, "filesize to int")
     local filesize_1 = buf2int(filesize_str_1)
     local filesize_2 = buf2int(filesize_str_2)
     local filesize = filesize_2
-    ngx.log(ngx.ERR, "filesize str1:" , filesize_str_1 , " num:" .. filesize_1 ..
-        " str2:" , filesize_str_2 ,  "num2" , filesize_2 , " filesize :", filesize)
 
     local is_slave = IS_SLAVE_FILE(filename_len, filesize_1)
     local is_appender = IS_APPENDER_FILE(filesize_1)
     if ( is_slave or is_appender or get_from_server) then
-        ngx.log(ngx.ERR, "IS A appender FILE")
+        -- ngx.log(ngx.ERR, "IS A appender FILE")
         filesize = -1
     end
 
-    ngx.log(ngx.ERR, "filesize :" , filesize)
+    -- ngx.log(ngx.ERR, "filesize :" , filesize)
     local is_trunk = IS_TRUNK_FILE(filesize_1)
     if bit.arshift(filesize, 63) ~= 0 then
         filesize = bit.band(filesize, 0xFFFFFFFF) -- low 32 bits is file size
     elseif is_trunk then
-        ngx.log(ngx.ERR, "IS A TRUNCK FILE")
+        -- ngx.log(ngx.ERR, "IS A TRUNCK FILE")
         filesize = bit.band(filesize,0xFFFFFFFF)
     end
 
@@ -1240,13 +1245,9 @@ local function read_file_info_result(sock)
 end
 
 function _M.get_fileinfo_from_storage(self, fileid)
-    ngx.log(ngx.ERR, "get fileinfo from storage start~~~" )
     local storage, err = self:query_update_storage(fileid)
     if not storage then
         return nil, err
-    end
-    for k,v in pairs(storage) do
-        ngx.log(ngx.ERR, k .. "=", v)
     end
     local req, err = build_request(STORAGE_PROTO_CMD_QUERY_FILE_INFO, storage.group_name, storage.file_name)
     if not req then

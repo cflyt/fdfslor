@@ -69,7 +69,6 @@ end
 function Request:new()
     local headers = ngx.req.get_headers()
     local length = tonumber(headers["Content-Length"])
-    ngx.log(ngx.ERR, 'header range:', headers["Range"])
     local range = nil
     if headers["Range"] then
         range = Range:parse(headers["Range"])

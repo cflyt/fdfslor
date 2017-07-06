@@ -21,7 +21,7 @@ local function co_wrap(func)
     else
         return function(...)
             if co_status(co) == "suspended" then
-                ngx.log(ngx.ERR, "suspended,,,")
+                --ngx.log(ngx.ERR, "suspended,,,")
                 return select(2, co_resume(co, ...))
             else
                 return nil, "can't resume a " .. co_status(co) .. " coroutine"
@@ -31,6 +31,7 @@ local function co_wrap(func)
 end
 
 function _M.make_reader(data, chunk_size, total_size, cb_done)
+    -- ngx.log(ngx.ALERT, "make reader ", tostring(data), "chunk size:",chunk_size, "total_size:", total_size, "cb:", tostring(cb_done) )
     if type(data) == "string" then
         return co_wrap(function(chunk_size, total_size)
             local remain_length = total_size or slen(data)
@@ -108,8 +109,9 @@ function _M.make_reader(data, chunk_size, total_size, cb_done)
                 local received = 0
                 repeat
                     local length = chunk_size
-                    if received + length > total_size then
+                    if received + length >= total_size then
                         length = total_size - received
+                        -- ngx.log(ngx.ERR, "part length:", length)
                     end
 
                     if length > 0 then
@@ -124,12 +126,11 @@ function _M.make_reader(data, chunk_size, total_size, cb_done)
                             ngx.log(ngx.ERR, "read nil: ".. err)
                             break
                         end
-
                         received = received + length
-                        co_yield(chunk)
                     end
 
-                until length == 0
+                until length <= 0
+                -- ngx.log(ngx.ERR, "receive bytes:", received)
             end
 
             if cb_done then

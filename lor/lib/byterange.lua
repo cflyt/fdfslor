@@ -46,7 +46,6 @@ function ContentRange:new(start, stop, length)
     if not _is_content_range_valid(start, stop, length) then
         error(string.format("Bad start:stop/length: %s-%s/%s" , tostring(start), tostring(stop), tostring(length)))
     end
-    ngx.log(ngx.ERR, "Content range:", start, ":", stop, ":", length)
     local instance = {
         start = start,
         stop = stop,  -- this is python-style range stop (non-inclusive)
@@ -170,7 +169,6 @@ function Range:parse(header)
    --     Parse the header; may return None if header is invalid
     local header = header or ""
     local start, stop = string.match(header, _rx_range)
-    ngx.log(ngx.ERR, "start ", start, "stop ", stop)
     start = _trim(start)
     stop = _trim(stop)
     if start == "" then
