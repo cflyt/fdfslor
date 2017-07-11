@@ -31,7 +31,6 @@ local FAMILY_INET6  = 0x06
 -- @see     ntohs
 function _M.htons(x)
     if LITTLE_ENDIAN then
-        ngx.log(ngx.ERR, " little, endian ")
         return bit.bor(
             bit.rshift( x, 8 ),
             bit.band( bit.lshift( x, 8 ), 0xFF00 )

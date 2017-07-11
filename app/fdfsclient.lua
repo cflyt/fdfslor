@@ -3,7 +3,8 @@ local utils = require("app.utils")
 local lor_utils = require("lor.lib.utils.utils")
 setmetatable(utils, {__index=lor_utils})
 --local base64 = require("lor.lib.utils.base64")
-local base64 = require("lor.lib.utils.ee5_base64")
+--local base64 = require("lor.lib.utils.ee5_base64")
+local base64 = require("app.fdfs_base64")
 local iputils = require("lor.lib.utils.ip")
 local string = string
 local table  = table
@@ -83,7 +84,14 @@ local FDFS_APPENDER_FILE_SIZE = INFINITE_FILE_SIZE
 local FDFS_NORMAL_LOGIC_FILENAME_LENGTH  = (FDFS_LOGIC_FILE_PATH_LEN +
         FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1)
 
+local FDFS_NORMAL_FILENAME_LENGTH_NO_PATH  = (
+        FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1)
+
 local FDFS_TRUNK_FILENAME_LENGTH = (FDFS_TRUE_FILE_PATH_LEN +
+        FDFS_FILENAME_BASE64_LENGTH + FDFS_TRUNK_FILE_INFO_LEN +
+        1 + FDFS_FILE_EXT_NAME_MAX_LEN)
+
+local FDFS_TRUNK_FILENAME_LENGTH_NO_PATH = (
         FDFS_FILENAME_BASE64_LENGTH + FDFS_TRUNK_FILE_INFO_LEN +
         1 + FDFS_FILE_EXT_NAME_MAX_LEN)
 
@@ -92,6 +100,8 @@ local FDFS_TRUNK_LOGIC_FILENAME_LENGTH =  (FDFS_TRUNK_FILENAME_LENGTH +
 
 
 local IP_ADDRESS_SIZE = 16
+
+local base64 = base64:new(0, '-', '_', '.')
 
 local function IS_UPPER_HEX(ch)
     return ((ch >= '0' and ch <= '9') or (ch >= 'A' and ch <= 'F'))
@@ -112,7 +122,6 @@ local function dump(o)
       return tostring(o)
    end
 end
-
 
 function _M.new(self)
     return setmetatable({}, mt)
@@ -141,14 +150,13 @@ end
 
 local function int2buf(n)
     -- ngx.log(ngx.ERR,  string.format("%d:%d:%d:%d", bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff)))
-    return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
-    --return string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
+    --return string.rep("\00", 4) .. string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
+    return string.char(bit.band(bit.rshift(n, 24), 0xff), bit.band(bit.rshift(n, 16), 0xff), bit.band(bit.rshift(n, 8), 0xff), bit.band(n, 0xff))
 end
 
 local function buf2int(buf)
     -- local c1, c2, c3, c4 = string.byte(buf, 5, 8)
     local c1, c2, c3, c4 = string.byte(buf, 1, 4)
-    -- ngx.log(ngx.ERR,  "buf2int:", string.format("%d:%d:%d:%d", c1,c2,c3,c4))
     return bit.bor(bit.lshift(c1, 24), bit.lshift(c2, 16),bit.lshift(c3, 8), c4)
 end
 
@@ -439,7 +447,7 @@ function _M.do_upload_appender2(self, reader, filesize, ext_name, chunk_size)
             ngx.exit(500)
         end
 
-        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        --ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
         send_count = send_count + bytes
     end
     if send_count ~= file_size then
@@ -474,7 +482,7 @@ function _M.do_upload2(self, reader, file_size, ext_name, chunk_size)
         return nil, "can't query storage"
     end
 
-    ngx.log(ngx.ERR, storage.host, storage.port)
+    --ngx.log(ngx.ERR, storage.host, storage.port)
     -- ext_name
     if not ext_name then
         ext_name = ""
@@ -530,7 +538,7 @@ function _M.do_upload2(self, reader, file_size, ext_name, chunk_size)
             ngx.exit(500)
         end
 
-        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        --ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
         send_count = send_count + bytes
     end
     if send_count ~= file_size then
@@ -831,7 +839,7 @@ function _M.do_download2(self, fileid, start, stop)
 
     -- read request header
     local hdr = read_fdfs_header(sock)
-    ngx.log(ngx.ERR, "hdr: ", hdr.len)
+    --ngx.log(ngx.ERR, "hdr: ", hdr.len)
 
     --local keepalive = self.storage_keepalive
     --if keepalive then
@@ -960,7 +968,7 @@ function _M.do_append2(self, fileid, reader, file_size, chunk_size )
             ngx.exit(500)
         end
 
-        ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
+        --ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
         send_count = send_count + bytes
     end
     if send_count ~= file_size then
@@ -1080,45 +1088,46 @@ local function fdfs_get_server_id_type(id)
 end
 
 local function IS_TRUNK_FILE(file_size)
-    --ngx.log(ngx.ERR, "trunkfile:", file_size, ":", FDFS_TRUNK_FILE_MARK_SIZE)
     -- ngx.log(ngx.ERR, "bit.band: ", bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE))
     return bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE) ~= 0
 end
 
 local function IS_SLAVE_FILE(filename_len, file_size)
     -- ngx.log(ngx.ERR, "slave file: ", filename_len, ":",file_size )
-    return ((filename_len > FDFS_TRUNK_LOGIC_FILENAME_LENGTH) or
-    (filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(file_size)))
+    --return ((filename_len > FDFS_TRUNK_LOGIC_FILENAME_LENGTH) or
+    --(filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(file_size)))
+    return ((filename_len > FDFS_TRUNK_FILENAME_LENGTH_NO_PATH) or
+    (filename_len > FDFS_NORMAL_FILENAME_LENGTH_NO_PATH and not IS_TRUNK_FILE(file_size)))
 end
 
 local function IS_APPENDER_FILE(file_size)
-
      --ngx.log(ngx.ERR, "append filesize: ",  file_size, ":",  FDFS_APPENDER_FILE_SIZE)
     return (bit.band(file_size, FDFS_APPENDER_FILE_SIZE) ~=0 )
 end
 
-function _M.get_fileinfo(self, fileid, get_from_server)
-    -- ngx.log(ngx.ERR, "fileid type:", type(fileid))
-    fileid = utils.clear_slash(fileid)
-    fileid = utils.trim_prefix_slash(fileid)
-    fileid = utils.trim_suffix_slash(fileid)
-    local segments = utils.split(fileid, "/")
-    local group = segments[1]
-    local filename = segments[5]
-    local filename_len = string.len(filename)
-    --ngx.log(ngx.ERR, "filename:", filename, " filename_len:", filename_len)
-    if filename_len < FDFS_FILENAME_BASE64_LENGTH then
+function _M.get_fileinfo_ex(self, filename_without_path, get_from_server)
+    local filename_ori = filename_without_path or ""
+    local filename_len = string.len(filename_ori)
+
+    if filename_len < FDFS_NORMAL_FILENAME_LENGTH_NO_PATH then
         ngx.log(ngx.ERR, string.format("filename is to short %d < %d",
-                filename_len, FDFS_FILENAME_BASE64_LENGTH + FDFS_FILE_EXT_NAME_MAX_LEN + 1))
+                filename_len, FDFS_NORMAL_FILENAME_LENGTH_NO_PATH))
         return nil
     end
 
     local offset = 1
-    filename = base64.decode(filename)
+    local filename = string.sub(filename_ori, 1, FDFS_FILENAME_BASE64_LENGTH)
+
+    --filename = base64.decode(filename)
+    filename = base64:base64_decode_auto(filename)
+
     local ip_addr = string.sub(filename, 1, 4)
     offset = offset + 4
-    local ip_addr_num = iputils.ntohl(buf2int(ip_addr))
-    -- ngx.log(ngx.ERR, "ip_addr_str:", ip_addr, " num:", ip_addr_num)
+
+    local ip_addr_num  = buf2int(ip_addr)
+
+    ip_addr_num = iputils.ntohl(ip_addr_num)
+    --ngx.log(ngx.ERR, "ip_addr_str:", ip_addr, " num:", ip_addr_num)
 
     local source_ip_addr = ""
     local source_id = ""
@@ -1128,15 +1137,15 @@ function _M.get_fileinfo(self, fileid, get_from_server)
         source_ip_addr = iputils.inet_ntoa(iputils.ntohl(ip_addr_num))
     end
 
-    local timestamp_str = string.sub(filename, offset, offset+4)
+    local timestamp_str = string.sub(filename, offset, offset+3)
     offset = offset + 4
     local timestamp = buf2int(timestamp_str)
     -- ngx.log(ngx.ERR, "timestamp_str:", timestamp_str, " num:", timestamp)
 
-    local filesize_str_1 = string.sub(filename, offset, offset+4)
+    local filesize_str_1 = string.sub(filename, offset, offset+3)
     offset = offset + 4
 
-    local filesize_str_2 = string.sub(filename, offset, offset+4)
+    local filesize_str_2 = string.sub(filename, offset, offset+3)
     offset = offset + 4
 
     local filesize_1 = buf2int(filesize_str_1)
@@ -1159,9 +1168,9 @@ function _M.get_fileinfo(self, fileid, get_from_server)
         filesize = bit.band(filesize,0xFFFFFFFF)
     end
 
-    ngx.log(ngx.ERR, "filesize :" , filesize)
+    -- ngx.log(ngx.ERR, "filesize :" , filesize)
 
-    local crc32 = buf2int(string.sub(filename, offset, offset+4))
+    local crc32 = buf2int(string.sub(filename, offset))
 
     local fileinfo = {
         source_id = source_id,
@@ -1173,7 +1182,39 @@ function _M.get_fileinfo(self, fileid, get_from_server)
         crc32 = crc32,
         filesize = filesize
     }
+    if is_trunk then
+        local filename = string.sub(filename_ori, FDFS_FILENAME_BASE64_LENGTH+1)
+        filename = base64:base64_decode_auto(filename)
+        offset = 1
+        local trunk_id_str = string.sub(filename, offset, offset+3)
+        offset = offset + 4
+        local trunk_id = buf2int(trunk_id_str)
+
+        local file_offset_str = string.sub(filename, offset, offset+3)
+        offset = offset + 4
+        local file_offset = buf2int(file_offset_str)
+
+        local size_str = string.sub(filename, offset, offset+3)
+        offset = offset + 4
+        local size = buf2int(size_str)
+
+        fileinfo["trunk_id"] = trunk_id
+        fileinfo["offset"] = file_offset
+        fileinfo["size"] = size
+     end
+
     return fileinfo
+end
+
+function _M.get_fileinfo(self, fileid)
+    fileid = utils.clear_slash(fileid)
+    fileid = utils.trim_prefix_slash(fileid)
+    fileid = utils.trim_suffix_slash(fileid)
+    local segments = utils.split(fileid, "/")
+    local group = segments[1]
+    local filename_ori = segments[5] or ""
+    local filename_len = string.len(filename_ori)
+    return self:get_fileinfo_ex(filename_ori)
 end
 
 -- build request
@@ -1217,15 +1258,15 @@ local function read_file_info_result(sock)
         ngx.log(ngx.ERR, "read data: " .. data, " len:", hdr.len)
 
         local offset = 1
-        local filesize_str = string.sub(data, offset, offset+8)
+        local filesize_str = string.sub(data, offset, offset+8-1)
         offset = offset + 8
         local filesize = buf2long(filesize_str)
 
-        local timestamp_str = string.sub(data, offset, offset+8)
+        local timestamp_str = string.sub(data, offset, offset+8-1)
         offset = offset + 8
         local timestamp = buf2long(timestamp_str)
 
-        local crc32_str = string.sub(data, offset, offset+8)
+        local crc32_str = string.sub(data, offset, offset+8-1)
         offset = offset + 8
         local crc32 = buf2long(crc32_str)
 
@@ -1286,7 +1327,6 @@ function _M.get_fileinfo_from_storage(self, fileid)
     return res
 
 end
-
 
 -- _M.query_upload_storage = query_upload_storage
 -- _M.do_upload_storage    = do_upload_storage
