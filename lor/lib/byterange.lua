@@ -43,6 +43,7 @@ local ContentRange = {}
     --]]
 
 function ContentRange:new(start, stop, length)
+
     if not _is_content_range_valid(start, stop, length) then
         error(string.format("Bad start:stop/length: %s-%s/%s" , tostring(start), tostring(stop), tostring(length)))
     end
@@ -125,9 +126,9 @@ function Range:range_for_length(length)
         the given length, then return a (start, stop) non-inclusive range
         of bytes to serve.  Otherwise return None
    --]]
-    --if not length then
-    --    return nil
-    --end
+    if length and length < 0 then
+        length = nil
+    end
     local start, stop = self.start, self.stop
     if not stop then
         stop = length
@@ -139,6 +140,7 @@ function Range:range_for_length(length)
         if length and stop > length then
             stop = length
         end
+
         return start, stop
     else
         return nil
@@ -155,6 +157,9 @@ function Range:content_range(length)
 
         Though it's still up to you to actually serve that content range!
    --]]
+    if length and length < 0 then
+        length = nil
+    end
     local start, stop = self:range_for_length(length)
     if not start then
         return nil

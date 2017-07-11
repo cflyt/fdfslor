@@ -1,15 +1,16 @@
 local lor = require("lor.index")
-local fdfsClient = require("app.fdfsclient")
+local fdfsClient = require("fastdfs.fdfs_client")
+local fsinfo = require("fastdfs.fdfs_fileinfo")
 local utils = require("app.utils")
-local fsinfo = require("fdfs_getinfo")
 local slen = string.len
 local ssub = string.sub
 local fsRouter = lor:Router() -- 生成一个group router对象
 local fdfs = fdfsClient:new()
-fdfs:set_tracker("192.168.56.10",22122)
-fdfs:set_timeout(5000)
+fdfs:set_trackers({{host="192.168.56.10",port=22122}})
+fdfs:set_timeout(20)
 fdfs:set_tracker_keepalive(0, 100)
 fdfs:set_storage_keepalive(0, 100)
+local default_chunk_size = 32*1024
 
 
 local function _getextension(filename)
@@ -20,10 +21,13 @@ fsRouter:post("/new/", function(req, res, next)
     local reader = nil
     local filesize = 0
     local args = req:args()
+    for k,v in pairs(args) do
+        ngx.log(ngx.ERR, k .. tostring(v))
+    end
     if req:is_multipart() then
         local args = req:args()
         if args.bigofile and args.bigofile.filename then
-            local extname = _getextension(args.bigofile.filename)
+            local ext_name = _getextension(args.bigofile.filename)
             file = args.bigofile.file
             file:seek("set", 0)
             filesize = file:seek("end")
@@ -36,7 +40,8 @@ fsRouter:post("/new/", function(req, res, next)
     end
     ngx.log(ngx.ERR, "filesize ", filesize, " ext ", ext_name, "chunk ", default_chunk_size)
     local fileid = nil
-    local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
+    local group = nil
+    local re, err = fdfs:do_upload(group, reader, filesize, ext_name, default_chunk_size)
     if not re then
         ngx.say("ERR: " .. err)
         ngx.exit(500)
@@ -46,20 +51,14 @@ fsRouter:post("/new/", function(req, res, next)
         ngx.exit(406)
     end
 
-    args["fileid"] = fileid
-    ngx.log(ngx.ERR, utils.dump(args))
-    local isOk,ip,now,createTime,realUrl,isTrunkFile = fsinfo.getFileinfo(fileid)
-    args['storage_ip'] = ip
-    args['create_time'] = createTime
-    args['real_url'] = realUrl
-    args['isTrunkFile'] = isTrunkFile
-    res:set_header("Content-Length", string.len(utils.dump(args)))
-    res:send(utils.dump(args))
+    local fileinfo = fsinfo.get_fileinfo(fileid)
+    fileinfo["file_id"] = fileid
+    res:set_header("Content-Length", string.len(utils.dump(fileinfo)))
+    res:send(utils.dump(fileinfo))
     --res:json({
     --    success = true,
     --    data = args
     --})
-
 
     -- local body_reader = req:body_reader()
     -- res:set_header("Content-Length", 600)
@@ -107,8 +106,9 @@ fsRouter:post("/appender/", function(req, res, next)
     end
     ngx.log(ngx.ERR, "filesize ", filesize, " ext ", ext_name, "chunk ", default_chunk_size)
     local fileid = nil
+    local group = nil
     --local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
-    local re, err = fdfs:do_upload_appender2(reader, filesize, ext_name, default_chunk_size)
+    local re, err = fdfs:do_upload_appender(group, reader, filesize, ext_name, default_chunk_size)
     if not re then
         ngx.say("ERR: " .. err)
         ngx.exit(500)
@@ -118,19 +118,10 @@ fsRouter:post("/appender/", function(req, res, next)
         ngx.exit(406)
     end
 
-    args["fileid"] = fileid
-    -- ngx.log(ngx.ERR, utils.dump(args))
-    local isOk,ip,now,createTime,realUrl,isTrunkFile = fsinfo.getFileinfo(fileid)
-    args['storage_ip'] = ip
-    args['create_time'] = createTime
-    args['real_url'] = realUrl
-    args['isTrunkFile'] = isTrunkFile
-    res:set_header("Content-Length", string.len(utils.dump(args)))
-    res:send(utils.dump(args))
-    --res:json({
-    --    success = true,
-    --    data = args
-    --})
+    local fileinfo = fsinfo.get_fileinfo(fileid)
+    fileinfo["file_id"] = fileid
+    res:set_header("Content-Length", string.len(utils.dump(fileinfo)))
+    res:send(utils.dump(fileinfo))
 
 end)
 
@@ -156,7 +147,7 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
     ngx.log(ngx.ERR, "filesize ", filesize, " ext ", ext_name, "chunk ", default_chunk_size)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     --local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
-    local re, err = fdfs:do_append2(fileid, reader, filesize, default_chunk_size)
+    local re, err = fdfs:do_append(fileid, reader, filesize, default_chunk_size)
     if not re then
         --ngx.say("ERR: " .. (err or "append failed"))
         ngx.exit(500)
@@ -190,9 +181,15 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         start = req.range.start
         stop = req.range.stop
     end
-    local fileinfo = fdfs:get_fileinfo(fileid)
+    local fileinfo = fsinfo.get_fileinfo(fileid)
     local filesize = fileinfo.filesize
-    local reader, len = fdfs:do_download2(fileid, start, stop)
+    if fileinfo.is_appender then
+        local update_info = fdfs:get_fileinfo_from_storage(fileid)
+        if update_info then
+            filesize = update_info.filesize
+        end
+    end
+    local reader, len = fdfs:do_download(fileid, start, stop)
     if not reader then
         return res:status(500):send("can not read")
     end
@@ -222,7 +219,7 @@ end)
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
-    local fileinfo = fdfs:get_fileinfo(fileid)
+    local fileinfo = fsinfo.get_fileinfo(fileid)
     -- local fileinfo = fdfs:get_fileinfo_from_storage(fileid)
     if fileinfo then
         res:status(200)
