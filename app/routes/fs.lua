@@ -4,6 +4,7 @@ local fsinfo = require("fastdfs.fdfs_fileinfo")
 local utils = require("app.utils")
 local slen = string.len
 local ssub = string.sub
+local smatch = string.match
 local fsRouter = lor:Router() -- 生成一个group router对象
 local fdfs = fdfsClient:new()
 fdfs:set_trackers({{host="192.168.56.10",port=22122}})
@@ -14,12 +15,14 @@ local default_chunk_size = 32*1024
 
 
 local function _getextension(filename)
-    return filename:match(".+%.(%w+)$")
+    ngx.log(ngx.ERR, "form file name:", filename)
+    return smatch(filename, ".+%.(%w+)$")
 end
 
 fsRouter:post("/new/", function(req, res, next)
     local reader = nil
     local filesize = 0
+    local ext_name = nil
     local args = req:args()
     for k,v in pairs(args) do
         ngx.log(ngx.ERR, k .. tostring(v))
@@ -27,7 +30,7 @@ fsRouter:post("/new/", function(req, res, next)
     if req:is_multipart() then
         local args = req:args()
         if args.bigofile and args.bigofile.filename then
-            local ext_name = _getextension(args.bigofile.filename)
+            ext_name = _getextension(args.bigofile.filename)
             file = args.bigofile.file
             file:seek("set", 0)
             filesize = file:seek("end")
