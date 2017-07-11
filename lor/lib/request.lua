@@ -27,10 +27,10 @@ local Request = {}
 --                 end}
 --
 local MAX_POST_ARGS_NUM = 64
-local default_chunk_size = 100
+local default_chunk_size = 1024 * 32
 
 
-function dump(o)
+local function dump(o)
    if type(o) == 'table' then
       local s = '{ '
       for k,v in pairs(o) do
@@ -89,7 +89,7 @@ function Request:new()
         version = ngx.req.http_version(),
         range = range,
         -- uri_args = ngx.var.args,
-        body_read = false,
+        has_read_body = false,
         found = false -- 404 or not
     }
     setmetatable(instance, { __index = self })
@@ -191,19 +191,19 @@ function Request:POST()
     end
 
     if sfind(self.content_type, "application/x-www-form-urlencoded", 1, true) then
-        self.read_body = true
+        self.has_read_body = true
         ngx.req.read_body()
         return ngx.req.get_post_args(MAX_POST_ARGS_NUM)
     elseif sfind(self.content_type, "application/json", 1, true) then
         ngx.req.read_body()
-        self.read_body = true
+        self.has_read_body = true
         local json_str = ngx.req.get_body_data()
         return utils.json_decode(json_str)
     elseif sfind(self.content_type, "multipart", 1, true) then
         -- upload request, should not invoke ngx.req.read_body()
         -- parsed as raw by default
         post_args, err = _multipart_formdata()
-        self.read_body = true
+        self.has_read_body = true
         if not post_args then
             return {}
         end
@@ -245,7 +245,7 @@ function Request:body_raw()
         file_data = body_file:read("*a")
         body_file:close()
     end
-    self.read_body = true
+    self.has_read_body = true
     return body_raw .. file_data
 end
 
@@ -263,9 +263,6 @@ local function _body_file_reader(max_chunk_size)
                 ngx.log(ngx.ERR, "open temp file error: " , err)
             end
         end
-        ngx.log(ngx.ERR, "buffer_remain:" .. buffer_remain)
-        ngx.log(ngx.ERR, "max_chunk_size:" .. max_chunk_size)
-        -- ngx.log(ngx.ERR, "body_buffer: " .. body_buffer)
 
         repeat
             ngx.log(ngx.ERR, "repeat: " .. buffer_offset)
@@ -436,7 +433,7 @@ end
 function Request:body_reader()
     local body_reader = nil
     local err = nil
-    if self.read_body then
+    if self.has_read_body then
         ngx.log(ngx.ALERT, "get_body_file reader................")
         return _body_file_reader()
     end
@@ -458,67 +455,6 @@ function Request:body_reader()
 
     return body_reader, err
 end
-
---[[
--- new request: init args/params/body etc from http request
-function Request:new()
-    local body = {} -- body params
-    local headers = ngx.req.get_headers()
-
-    local header = headers['Content-Type']
-    -- the post request have Content-Type header set
-    if header then
-        if sfind(header, "application/x-www-form-urlencoded", 1, true) then
-            ngx.req.read_body()
-            local post_args = ngx.req.get_post_args()
-            if post_args and type(post_args) == "table" then
-                for k,v in pairs(post_args) do
-                    body[k] = v
-                end
-            end
-        elseif sfind(header, "application/json", 1, true) then
-            ngx.req.read_body()
-            local json_str = ngx.req.get_body_data()
-            body = utils.json_decode(json_str)
-        -- form-data request
-        elseif sfind(header, "multipart", 1, true) then
-            -- upload request, should not invoke ngx.req.read_body()
-        -- parsed as raw by default
-        else
-            ngx.req.read_body()
-            body = ngx.req.get_body_data()
-        end
-    -- the post request have no Content-Type header set will be parsed as x-www-form-urlencoded by default
-    else
-        ngx.req.read_body()
-        local post_args = ngx.req.get_post_args()
-        if post_args and type(post_args) == "table" then
-            for k,v in pairs(post_args) do
-                body[k] = v
-            end
-        end
-    end
-
-    local instance = {
-        path = ngx.var.uri, -- uri
-        method = ngx.req.get_method(),
-        query = ngx.req.get_uri_args(),
-        params = {},
-        body = body,
-        body_raw = ngx.req.get_body_data(),
-        url = ngx.var.request_uri,
-        origin_uri = ngx.var.request_uri,
-        uri = ngx.var.request_uri,
-        headers = headers, -- request headers
-
-        req_args = ngx.var.args,
-        found = false -- 404 or not
-    }
-    setmetatable(instance, { __index = self })
-    return instance
-end
-
-]]
 
 function Request:is_found()
     return self.found
