@@ -63,15 +63,40 @@ function _M.make_reader(data, chunk_size, total_size, cb_done)
     elseif io.type(data) == "file" then
         local file = data
         return co_wrap(function(chunk_size, total_size)
+            local chunk_size = chunk_size or 1024
+            local remain = total_size
+            local read_size
             repeat
-                local chunk = nil
-                chunk = file:read(chunk_size)
-                if chunk then
-                    co_yield(chunk)
-                else
-                    return nil
+                read_size = chunk_size
+                if remain and remain > 0 then
+                   if read_size < remain then
+                       read_size = remain
+                   end
                 end
+                local chunk = file:read(read_size)
+                if not chunk then
+                    break
+                end
+
+                co_yield(chunk)
+
+                if remain and remain >= 0 then
+                    remain = remain - read_size
+                    if remain <= 0 then
+                        break
+                    end
+                end
+
+                --local chunk = nil
+                --chunk = file:read(chunk_size)
+                --if chunk then
+                --    co_yield(chunk)
+                --else
+                --    return nil
+                --end
+
             until not chunk
+
             if cb_done then
                 cb_done(file)
             end

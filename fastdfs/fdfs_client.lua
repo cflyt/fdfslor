@@ -40,23 +40,33 @@ function _M.set_timeout(self, timeout)
     end
 end
 
-function _M.set_tracker_keepalive(self, timeout, size)
-    local keepalive = {timeout = timeout, size = size}
+function _M.set_tracker_keepalive(self, keepalive)
     self.tracker_keepalive = keepalive
 end
 
-function _M.set_storage_keepalive(self, timeout, size)
-    local keepalive = {timeout = timeout, size = size}
+function _M.set_storage_keepalive(self, keepalive)
     self.storage_keepalive = keepalive
 end
+
+
+--function _M.set_tracker_keepalive(self, timeout, size)
+--    local keepalive = {timeout = timeout, size = size}
+--    self.tracker_keepalive = keepalive
+--end
+
+--function _M.set_storage_keepalive(self, timeout, size)
+--    local keepalive = {timeout = timeout, size = size}
+--    self.storage_keepalive = keepalive
+--end
 
 function _M.get_tracker(self)
     local tk = fdfs_tracker:new(self.timeout, self.tracker_keepalive)
     for _, addr in pairs(self.trackers) do
        local ok, err = tk:connect(addr)
-
        if ok then
            return tk
+       else
+           ngx.log(ngx.ERR, "can't connect to tracker ", addr.host, ":", addr.port, ". auto try next one.." )
        end
     end
     return nil, "No Avaliable Tracker Server"
@@ -180,17 +190,17 @@ end
 function _M.do_download(self, fileid, start, stop)
     local tk,err = self:get_tracker()
     if not tk then
-        return nil, err
+        return nil, nil, err
     end
 
     local storage = tk:query_storage_fetch1(fileid)
     if not storage then
-        return nil, "can't query storage"
+        return nil, nil, "can't query storage"
     end
 
     local st_conn, err = self:get_storage(storage)
     if not st_conn then
-        return nil, err
+        return nil, nil, err
     end
 
     local chunk_size = 1024 * 64

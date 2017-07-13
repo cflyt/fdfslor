@@ -15,13 +15,24 @@ module(...)
 
 local VERSION = '0.1.2'
 
-function table2str(tbl) 
+function table2str(tbl)
     assert(tbl == nil, "param tbl can not be nil");
-    local result = "{"; 
-    for key,value in pairs(tbl) do 
+    local result = "{";
+    for key,value in pairs(tbl) do
         result = result..key.." = "..value..",";
     end
     return string.sub(result, 1, string.len(result) -1).."}";
+end
+
+function str_split(str, delimiter)
+    if not str or str == "" then return {} end
+    if not delimiter or delimiter == "" then return { str } end
+
+    local result = {}
+    for match in (str .. delimiter):gmatch("(.-)" .. delimiter) do
+        table_insert(result, match)
+    end
+    return result
 end
 
 function  split_fileid(fileid)

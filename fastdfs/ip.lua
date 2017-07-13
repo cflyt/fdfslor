@@ -82,4 +82,19 @@ function _M.inet_ntoa(n)
 end
 
 
+function _M.get_local_ip()
+    os.execute("/sbin/ifconfig|sed -n '/inet addr/s/^[^:]*:\\([0-9.]\\{7,15\\}\\) .*/\\1/p' > /tmp/ip.info");
+    local_ip_list = {}
+    local_ip_file = assert(io.open("/tmp/ip.info", "r"))
+
+    for line in local_ip_file:lines() do
+      local_ip_list[#local_ip_list + 1] = line
+    end
+
+    local_ip_file:close();
+    print(table.concat(local_ip_list,';'));
+
+    return local_ip_list;
+end
+
 return _M

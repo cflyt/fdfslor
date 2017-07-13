@@ -616,15 +616,16 @@ end
 function read_download_result_to_reader(self, chunk_size)
     local sock = self.sock
     if not sock then
-        return nil, "not initialized"
+        return nil, nil, "not initialized"
     end
     -- read request header
     local hdr, err = read_fdfs_header(sock)
     if not hdr then
-        return nil, "read storage header error:" .. err
+        return nil, nil, "read storage header error:" .. err
     end
+
     if hdr.status ~= 0 then
-        return nil, "read storage status error:" .. hdr.status
+        return nil, hdr.status, "read storage status error:" .. hdr.status
     end
 
     local chunk_size = chunk_size or default_chunk_size
@@ -640,17 +641,17 @@ end
 function download_file_to_reader(self, fileid, start, stop, chunk_size)
     local group_name, file_name, err = split_fileid(fileid)
     if not group_name or not file_name then
-        return nil, "fileid error:" .. err
+        return nil, nil, "fileid error:" .. err
     end
 
     local req, err = build_download_request(STORAGE_PROTO_CMD_DOWNLOAD_FILE, group_name, file_name, start, stop)
     if not req then
-        return nil, err
+        return nil, nil, err
     end
     -- send
     local bytes, err = self.sock:send(req)
     if not bytes then
-        return nil, "storage send request error:" .. err
+        return nil, nil, "storage send request error:" .. err
     end
     return self:read_download_result_to_reader(chunk_size)
 end

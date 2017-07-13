@@ -265,20 +265,19 @@ local function _body_file_reader(max_chunk_size)
         end
 
         repeat
-            ngx.log(ngx.ERR, "repeat: " .. buffer_offset)
             local chunk = nil
             local need_read_bytes = max_chunk_size
             if buffer_remain > 0 then
                 if buffer_remain <= max_chunk_size then
-                    ngx.log(ngx.ERR, "buffer_offset:" .. buffer_offset)
-                    ngx.log(ngx.ERR, "buffer_offset+buffer_remain:" .. (buffer_offset))
+                    --ngx.log(ngx.ERR, "buffer_offset:" .. buffer_offset)
+                    --ngx.log(ngx.ERR, "buffer_offset+buffer_remain:" .. (buffer_offset))
                     chunk = ssub(body_buffer, buffer_offset, buffer_offset+buffer_remain-1)
                     buffer_offset = buffer_offset + buffer_remain
                     need_read_bytes = max_chunk_size - buffer_remain
                     buffer_remain = 0
                 else
-                    ngx.log(ngx.ERR, "buffer_offset:" .. buffer_offset)
-                    ngx.log(ngx.ERR, "buffer_offset+max_chunk_size:" .. (buffer_offset+max_chunk_size))
+                    --ngx.log(ngx.ERR, "buffer_offset:" .. buffer_offset)
+                    --ngx.log(ngx.ERR, "buffer_offset+max_chunk_size:" .. (buffer_offset+max_chunk_size))
                     chunk = ssub(body_buffer, buffer_offset, buffer_offset+max_chunk_size-1)
                     buffer_remain = buffer_remain - max_chunk_size
                     buffer_offset = buffer_offset + max_chunk_size
