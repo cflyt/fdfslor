@@ -9,6 +9,7 @@ local store_paths = config.store_paths
 local slen = string.len
 local ssub = string.sub
 local smatch = string.match
+local sendfile = sendfile
 local fsRouter = lor:Router() -- 生成一个group router对象
 local fdfs = fdfsClient:new()
 --fdfs:set_trackers({{host="192.168.56.10",port=22122}})
@@ -224,15 +225,15 @@ local function get_full_path_file(store_path_str, high_dir, low_dir, filename, f
 end
 
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
-    --ngx.log(ngx.ERR, "download file~~~~~~~" .. req.uri)
+    ngx.log(ngx.ERR, "download file~~~~~~~" .. req.uri)
     ngx.log(ngx.ERR, tostring(req.range))
-    ngx.log(ngx.ERR, utils.dump(req.params))
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     local start, stop = 0, 0
     if req.range then
         start = req.range.start
         stop = req.range.stop
     end
+
     local fileinfo, err = fsinfo.get_fileinfo_ex(req.params.filename)
     if not fileinfo then
         res:status(404):send("Not Fount")
@@ -243,36 +244,60 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local is_exist_file = false
     if is_local_file(fileinfo) then
         local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
-        local fp, err = io.open(full_file_path, "rb")
+        local offset = 0
+        local fp, err = nil, nil
+        if fileinfo.is_trunk then
+            offset = fileinfo.offset or 0
+            offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
+        end
 
+        fp, err = io.open(full_file_path, "rb")
         if fp then
             if fileinfo.is_appender then
                 fp:seek("set", 0)
                 filesize = fp:seek("end")
-                --fp:seek("set", 0)
             end
-
             if req.range then
                 start, stop = req.range:range_for_length(filesize)
             else
                 start = 0
                 stop = filesize
             end
-
-            local offset = fileinfo.offset or 0
-            if fileinfo.is_trunk then
-                offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
-            end
             offset = offset + start
+
+            --directly use sendfile zero copy
+            if sendfile then
+                ngx.log(ngx.DEBUG, "local file, use sendfile")
+                fp:close()
+                res:set_header("Content-Length", stop-start)
+                if req.range then
+                    req.range.start = start
+                    req.range.stop = stop
+                    res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+                    res:status(206)
+                else
+                    res:status(200)
+                end
+                ngx.log(ngx.ERR, "start:", start, "stop:", stop, "offset:", offset)
+                sendfile(full_file_path, offset, stop-start)
+                return
+            end
+
+            ngx.log(ngx.DEBUG, "local file, use file:read()")
+            --use file:read
             fp:seek("set", offset)
-            reader = utils.make_reader(fp, chunk_size, stop-start, function(fp)
-    fp:close()
-end)        len = stop - start
+            reader = utils.make_reader(fp, chunk_size, stop-start,
+                    function(fp)
+                        fp:close()
+                     end)
+            len = stop - start
             is_exist_file = true
         end
     end
+
     local errno = nil
     if not is_exist_file then
+        --appender file need get filesize from server
         if fileinfo.is_appender then
             local update_info = fdfs:get_fileinfo_from_storage(fileid)
             if update_info then
@@ -286,14 +311,14 @@ end)        len = stop - start
             stop = filesize
         end
         reader, len, err = fdfs:do_download(fileid, start, stop)
-        errno = len
+        errno = len -- if failed, #2 return value marks status
     end
 
     if not reader then
         if errno then
             res:status(404):send("File Not Found")
         else
-            res:status(500).send("can not read, err:".. err)
+            res:status(500).send("Can't Read, Err:".. err)
         end
         return
     end
@@ -310,7 +335,7 @@ end)        len = stop - start
         ngx.eof()
     else
         while true do
-            local chunk = reader(1024, len)
+            local chunk = reader(default_chunk_size, len)
             if not chunk then
                 break
             end
