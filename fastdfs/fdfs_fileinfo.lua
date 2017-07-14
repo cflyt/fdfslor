@@ -75,6 +75,7 @@ local FDFS_TRUNK_FILENAME_LENGTH_NO_PATH = (
 local FDFS_TRUNK_LOGIC_FILENAME_LENGTH =  (FDFS_TRUNK_FILENAME_LENGTH +
         (FDFS_LOGIC_FILE_PATH_LEN - FDFS_TRUE_FILE_PATH_LEN))
 
+
 local IP_ADDRESS_SIZE = 16
 
 
@@ -236,24 +237,27 @@ function _M.get_fileinfo_ex(filename_without_path)
         filesize = filesize
     }
     if is_trunk then
-        local filename = string.sub(filename_ori, FDFS_FILENAME_BASE64_LENGTH+1)
-        filename = base64:base64_decode_auto(filename)
-        offset = 1
-        local trunk_id_str = string.sub(filename, offset, offset+3)
-        offset = offset + 4
-        local trunk_id = buf2int(trunk_id_str)
+        local filename = string.sub(filename_ori, FDFS_FILENAME_BASE64_LENGTH+1,
+                    FDFS_FILENAME_BASE64_LENGTH + FDFS_TRUNK_FILE_INFO_LEN)
+        if string.len(filename) == FDFS_TRUNK_FILE_INFO_LEN  then
+            filename = base64:base64_decode_auto(filename)
+            offset = 1
+            local trunk_id_str = string.sub(filename, offset, offset+3)
+            offset = offset + 4
+            local trunk_id = buf2int(trunk_id_str)
 
-        local file_offset_str = string.sub(filename, offset, offset+3)
-        offset = offset + 4
-        local file_offset = buf2int(file_offset_str)
+            local file_offset_str = string.sub(filename, offset, offset+3)
+            offset = offset + 4
+            local file_offset = buf2int(file_offset_str)
 
-        local size_str = string.sub(filename, offset, offset+3)
-        offset = offset + 4
-        local size = buf2int(size_str)
+            local size_str = string.sub(filename, offset, offset+3)
+            offset = offset + 4
+            local size = buf2int(size_str)
 
-        fileinfo["trunk_id"] = trunk_id
-        fileinfo["offset"] = file_offset
-        fileinfo["size"] = size
+            fileinfo["trunk_id"] = trunk_id
+            fileinfo["offset"] = file_offset
+            fileinfo["size"] = size
+        end
      end
 
     return fileinfo
