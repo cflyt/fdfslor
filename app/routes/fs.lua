@@ -3,9 +3,6 @@ local fdfsClient = require("fastdfs.fdfs_client")
 local fsinfo = require("fastdfs.fdfs_fileinfo")
 local iputils = require("fastdfs.ip")
 local utils = require("app.utils")
-local config = require("app.config")
-local storage_ids = config.storage_ids
-local store_paths = config.store_paths
 local slen = string.len
 local ssub = string.sub
 local smatch = string.match
@@ -16,7 +13,10 @@ local fdfs = fdfsClient:new()
 --fdfs:set_timeout(20)
 --fdfs:set_tracker_keepalive(0, 100)
 --fdfs:set_storage_keepalive(0, 100)
-
+--
+local config = require("app.config")
+local storage_ids = config.storage_ids
+local store_paths = config.store_paths
 fdfs:set_timeout(config.tracker_timeout)
 fdfs:set_trackers(config.trackers)
 fdfs:set_tracker_keepalive(config.tracker_keepalive)
@@ -349,6 +349,8 @@ end)
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    ngx.log(ngx.ERR, "fileid:", fileid)
+    ngx.log(ngx.ERR, "fileid:", utils.dump(req.params))
     local fileinfo = fsinfo.get_fileinfo(fileid)
     -- local fileinfo = fdfs:get_fileinfo_from_storage(fileid)
     if fileinfo then
@@ -356,8 +358,9 @@ fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req,
         res:json(fileinfo)
     else
         res:status(400)
-        res:send("cann't get file info")
+        res:send("Cann't Get File Info")
     end
 end)
+
 
 return fsRouter
