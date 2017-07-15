@@ -243,7 +243,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local filesize = fileinfo.filesize
     local reader, len ,err
     local is_exist_file = false
-    if false and is_local_file(fileinfo) then
+    if is_local_file(fileinfo) then
         local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
         local offset = 0
         local fp, err = nil, nil
