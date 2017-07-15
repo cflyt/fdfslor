@@ -17,6 +17,7 @@ local fdfs = fdfsClient:new()
 local config = require("conf.config")
 local storage_ids = config.storage_ids
 local store_paths = config.store_paths
+local FILE_SYNC_MAX_TIME = config.file_sync_max_time
 fdfs:set_timeout(config.tracker_timeout)
 fdfs:set_trackers(config.trackers)
 fdfs:set_tracker_keepalive(config.tracker_keepalive)
@@ -253,17 +254,19 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local filesize = fileinfo.filesize
     local reader, len ,err
     local is_exist_file = false
-    if is_local_file(source_ip_addr) then
-        local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
-        local offset = 0
-        local fp, err = nil, nil
-        if fileinfo.is_trunk then
-            offset = fileinfo.offset or 0
-            offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
-        end
+    local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
+    local fp, err = io.open(full_file_path, "rb")
+    if fp then --file exist local
+        local create_time = fileinfo.timestamp
+        local now = ngx.now()
+        local elapse = now - create_time
+        if is_local_file(source_ip_addr) or elapse > FILE_SYNC_MAX_TIME then
+            local offset = 0
+            if fileinfo.is_trunk then
+                offset = fileinfo.offset or 0
+                offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
+            end
 
-        fp, err = io.open(full_file_path, "rb")
-        if fp then
             if fileinfo.is_appender then
                 fp:seek("set", 0)
                 filesize = fp:seek("end")
