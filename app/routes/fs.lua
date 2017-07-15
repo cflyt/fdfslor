@@ -14,7 +14,7 @@ local fdfs = fdfsClient:new()
 --fdfs:set_tracker_keepalive(0, 100)
 --fdfs:set_storage_keepalive(0, 100)
 --
-local config = require("app.config")
+local config = require("conf.config")
 local storage_ids = config.storage_ids
 local store_paths = config.store_paths
 fdfs:set_timeout(config.tracker_timeout)
@@ -182,7 +182,9 @@ local function is_local_file(fileinfo)
         if not fileinfo.source_id or fileinfo.source_id == "" then
             return false
         end
-        source_ip_addr = storage_ids[fileinfo.source_id].ip
+        if storage_ids[fileinfo.source_id] then
+            source_ip_addr = storage_ids[fileinfo.source_id].ip
+        end
     end
     if not source_ip_addr or source_ip_addr == "" then
         return false
@@ -225,8 +227,7 @@ local function get_full_path_file(store_path_str, high_dir, low_dir, filename, f
 end
 
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
-    ngx.log(ngx.ERR, "download file~~~~~~~" .. req.uri)
-    ngx.log(ngx.ERR, tostring(req.range))
+    --ngx.log(ngx.ERR, tostring(req.range))
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     local start, stop = 0, 0
     if req.range then
@@ -242,7 +243,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local filesize = fileinfo.filesize
     local reader, len ,err
     local is_exist_file = false
-    if is_local_file(fileinfo) then
+    if false and is_local_file(fileinfo) then
         local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
         local offset = 0
         local fp, err = nil, nil
@@ -259,6 +260,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             end
             if req.range then
                 start, stop = req.range:range_for_length(filesize)
+                if not start then
+                    res:status(400):send("Invalid Range")
+                    return
+                end
             else
                 start = 0
                 stop = filesize
@@ -278,7 +283,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 else
                     res:status(200)
                 end
-                ngx.log(ngx.ERR, "start:", start, "stop:", stop, "offset:", offset)
+                --ngx.log(ngx.ERR, "start:", start, "stop:", stop, "offset:", offset)
                 sendfile(full_file_path, offset, stop-start)
                 return
             end
@@ -306,6 +311,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         end
         if req.range then
             start, stop = req.range:range_for_length(filesize)
+            if not start then
+                res:status(400):send("Invalid Range")
+                return
+            end
         else
             start = 0
             stop = filesize
@@ -316,9 +325,9 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
 
     if not reader then
         if errno then
-            res:status(404):send("File Not Found")
+            res:status(404):send("File Not Found, Err ", errno)
         else
-            res:status(500).send("Can't Read, Err:".. err)
+            res:status(500):send("Can't Read, Err:".. err)
         end
         return
     end
@@ -349,8 +358,6 @@ end)
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
-    ngx.log(ngx.ERR, "fileid:", fileid)
-    ngx.log(ngx.ERR, "fileid:", utils.dump(req.params))
     local fileinfo = fsinfo.get_fileinfo(fileid)
     -- local fileinfo = fdfs:get_fileinfo_from_storage(fileid)
     if fileinfo then
