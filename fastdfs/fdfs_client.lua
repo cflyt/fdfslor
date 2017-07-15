@@ -61,6 +61,13 @@ end
 
 function _M.get_tracker(self)
     local tk = fdfs_tracker:new(self.timeout, self.tracker_keepalive)
+    local addr = self.trackers[math.random(#self.trackers)]
+    local ok, err = tk:connect(addr)
+    if ok then
+        return tk
+    end
+
+    --if random one failed, try other
     for _, addr in pairs(self.trackers) do
        local ok, err = tk:connect(addr)
        if ok then
