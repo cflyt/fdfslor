@@ -173,23 +173,32 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
 
 end)
 
-local function is_local_file(fileinfo)
+local function get_source_ip_port(fileinfo)
     if not fileinfo then
-       return false
+       return nil, nil
     end
     local source_ip_addr = fileinfo.source_ip_addr
+    local source_port = nil
     if source_ip_addr == "" then
         if not fileinfo.source_id or fileinfo.source_id == "" then
-            return false
+            return nil,nil
         end
         if storage_ids[fileinfo.source_id] then
             source_ip_addr = storage_ids[fileinfo.source_id].ip
+            source_port = storage_ids[fileinfo.source_id].port
         end
     end
     if not source_ip_addr or source_ip_addr == "" then
+        return nil,nil
+    end
+    return source_ip_addr, source_port
+end
+
+local function is_local_file(source_ip_addr)
+    if not source_ip_addr or source_ip_addr == "" then
         return false
     end
-    local g_cache = ngx.shared.g_cache
+    local g_cache = ngx.shared.g_cache or {}
     local ips = g_cache:get("local_ips")
     if not ips then
         local table_ips = iputils.get_local_ip()
@@ -240,10 +249,11 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         res:status(404):send("Not Fount")
         return
     end
+    local source_ip_addr = get_source_ip_port(fileinfo)
     local filesize = fileinfo.filesize
     local reader, len ,err
     local is_exist_file = false
-    if is_local_file(fileinfo) then
+    if is_local_file(source_ip_addr) then
         local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
         local offset = 0
         local fp, err = nil, nil
@@ -304,7 +314,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     if not is_exist_file then
         --appender file need get filesize from server
         if fileinfo.is_appender then
-            local update_info = fdfs:get_fileinfo_from_storage(fileid)
+            local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
             if update_info then
                 filesize = update_info.filesize
             end
@@ -319,7 +329,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             start = 0
             stop = filesize
         end
-        reader, len, err = fdfs:do_download(fileid, start, stop)
+        reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr)
         errno = len -- if failed, #2 return value marks status
     end
 

@@ -187,13 +187,17 @@ function _M.do_delete(self, fileid)
     return hdr
 end
 
-function _M.do_download(self, fileid, start, stop)
-    local tk,err = self:get_tracker()
-    if not tk then
-        return nil, nil, err
+function _M.do_download(self, fileid, start, stop, storage_ip)
+    local storage = nil
+    if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
+        storage = {host=storage_ip}
+    else
+        local tk,err = self:get_tracker()
+        if not tk then
+            return nil, nil, err
+        end
+        storage = tk:query_storage_fetch1(fileid)
     end
-
-    local storage = tk:query_storage_fetch1(fileid)
     if not storage then
         return nil, nil, "can't query storage"
     end
@@ -293,13 +297,18 @@ local function read_file_info_result(sock)
     return nil
 end
 
-function _M.get_fileinfo_from_storage(self, fileid)
-    local tk,err = self:get_tracker()
-    if not tk then
-        return nil, err
-    end
+function _M.get_fileinfo_from_storage(self, fileid, storage_ip)
+    local storage = nil
+    if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
+        storage = {host=storage_ip}
+    else
+        local tk, err = self:get_tracker()
+        if not tk then
+            return nil, err
+        end
 
-    local storage = tk:query_storage_update1(fileid)
+        storage = tk:query_storage_update1(fileid)
+    end
     if not storage then
         return nil, "can't query storage"
     end
