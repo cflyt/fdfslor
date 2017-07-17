@@ -28,6 +28,7 @@ local Request = {}
 --
 local MAX_POST_ARGS_NUM = 64
 local default_chunk_size = 1024 * 32
+local default_read_timeout = 10   -- seconds
 
 
 local function dump(o)
@@ -115,7 +116,8 @@ local function _multipart_formdata()
         ngx.log(ngx.ERR, "failed to new upload: ", err)
         ngx.exit(500)
     end
-    form:set_timeout(5)
+
+    form:set_timeout(1000*default_read_timeout) --milliseconds
 
     local success, msg = false, ""
     local file, origin_filename, filename, err

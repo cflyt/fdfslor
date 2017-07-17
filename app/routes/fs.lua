@@ -33,7 +33,7 @@ local function _getextension(filename)
     return smatch(filename, ".+%.(%w+)$")
 end
 
-fsRouter:post("/new/", function(req, res, next)
+fsRouter:post("/file/new/", function(req, res, next)
     local reader = nil
     local filesize = 0
     local ext_name = nil
@@ -52,22 +52,31 @@ fsRouter:post("/new/", function(req, res, next)
         reader = req:body_reader(default_chunk_size)
         filesize = req.content_length
     end
+    if not reader then
+        --ngx.say("ERR: upload reader is nil")
+        ngx.exit(500)
+        return
+    end
     local fileid = nil
     local group = nil
     local re, err = fdfs:do_upload(group, reader, filesize, ext_name, default_chunk_size)
     if not re then
-        ngx.say("ERR: " .. err)
-        ngx.exit(500)
+        res:status(500):send("ERR: " .. err)
+        return
     elseif re then
         fileid = string.format("%s/%s",re.group_name, re.file_name)
     else
         ngx.exit(406)
+        return
     end
 
     local fileinfo = fsinfo.get_fileinfo(fileid)
     fileinfo["file_id"] = fileid
-    res:set_header("Content-Length", string.len(utils.dump(fileinfo)))
-    res:send(utils.dump(fileinfo))
+
+    local json_str = string.format('{"fileid":"%s", "crc32": %s}', fileid, fileinfo.crc32)
+    res:set_header("Content-Length", string.len(json_str))
+    res:set_header('Content-Type', 'application/json; charset=utf-8')
+    res:send(json_str)
     --res:json({
     --    success = true,
     --    data = args
@@ -97,7 +106,7 @@ fsRouter:post("/new/", function(req, res, next)
 end)
 
 
-fsRouter:post("/appender/", function(req, res, next)
+fsRouter:post("/file/appender/", function(req, res, next)
     local reader = nil
     local filesize = 0
     local args = req:args()
@@ -120,8 +129,8 @@ fsRouter:post("/appender/", function(req, res, next)
     --local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
     local re, err = fdfs:do_upload_appender(group, reader, filesize, ext_name, default_chunk_size)
     if not re then
-        ngx.say("ERR: " .. err)
-        ngx.exit(500)
+        res:status(500):send("ERR: " .. err)
+        return
     elseif re then
         fileid = string.format("%s/%s",re.group_name, re.file_name)
     else
@@ -129,9 +138,11 @@ fsRouter:post("/appender/", function(req, res, next)
     end
 
     local fileinfo = fsinfo.get_fileinfo(fileid)
-    fileinfo["file_id"] = fileid
-    res:set_header("Content-Length", string.len(utils.dump(fileinfo)))
-    res:send(utils.dump(fileinfo))
+
+    local json_str = string.format('{"fileid":"%s", "crc32": %s}', fileid, fileinfo.crc32)
+    res:set_header("Content-Length", string.len(json_str))
+    res:set_header('Content-Type', 'application/json; charset=utf-8')
+    res:send(json_str)
 
 end)
 
@@ -157,11 +168,11 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
     --local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
     local re, err = fdfs:do_append(fileid, reader, filesize, default_chunk_size)
     if not re then
-        --ngx.say("ERR: " .. (err or "append failed"))
-        ngx.exit(500)
+        res:status(500):send("ERR: " .. (err or "append failed"))
+        return
     elseif re then
-        res:set_header("Content-Length", string.len(utils.dump(re)))
-        res:send(utils.dump(re))
+        ngx.exit(204)
+        return
     else
         ngx.exit(406)
     end
@@ -238,6 +249,7 @@ end
 
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     --ngx.log(ngx.ERR, tostring(req.range))
+    ngx.log(ngx.ERR, utils.dump(req.params))
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     local start, stop = 0, 0
     if req.range then
