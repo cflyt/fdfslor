@@ -198,13 +198,16 @@ function _M.do_download(self, fileid, start, stop, storage_ip)
     local storage = nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
-    else
+    end
+
+    if not storage then
         local tk,err = self:get_tracker()
         if not tk then
             return nil, nil, err
         end
         storage = tk:query_storage_fetch1(fileid)
     end
+
     if not storage then
         return nil, nil, "can't query storage"
     end
@@ -214,7 +217,7 @@ function _M.do_download(self, fileid, start, stop, storage_ip)
         return nil, nil, err
     end
 
-    local chunk_size = 1024 * 64
+    local chunk_size = default_chunk_size or 1024 * 64
     return st_conn:download_file_to_reader(fileid, start,stop, chunk_size)
 end
 
@@ -234,7 +237,7 @@ function _M.do_append(self, fileid, reader, file_size, chunk_size )
         return nil
     end
 
-    local tk,err = self:get_tracker()
+    local tk, err = self:get_tracker()
     if not tk then
         return nil, err
     end
@@ -308,12 +311,12 @@ function _M.get_fileinfo_from_storage(self, fileid, storage_ip)
     local storage = nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
-    else
+    end
+    if not storage then
         local tk, err = self:get_tracker()
         if not tk then
             return nil, err
         end
-
         storage = tk:query_storage_update1(fileid)
     end
     if not storage then
