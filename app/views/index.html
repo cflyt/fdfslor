@@ -9,9 +9,12 @@ body {
 .lor {
     margin: 100px auto;
     width: 800px;
+    text-align:center;
 }
 
 .name {
+    text-align:center;
+    margin:0 auto;
     display: block;
     font: 100 4.5em "Helvetica Neue","Open Sans",sans-serif;
     margin-bottom: 0.25em;
@@ -23,23 +26,33 @@ a {
 }
 
 .description {
-  position: relative;
+  text-align:center;
+  margin:0 auto;
   top: -5px;
+  left: 20px;
   font: 100 3em "Helvetica Neue","Open Sans",sans-serif;
   color: #AEAEAE;
+}
+
+.api {
+  text-align:center;
+  margin:0 auto;
+  font: 70 3em "Helvetica Neue","Open Sans",sans-serif;
 }
 </style>
 <body>
 
 <div class="lor">
 <a href="#" class="name">
-{{name}} 
+{{name}}
 {% if locals.app_version then %}
     <span class="version">{{locals.app_version}}</span>
 {% end %}
 </a>
-<span class="description">{{desc}}</span>
-
+<span class="description">海量文件存储服务</span>
+</div>
+<div class="api">
+    <a href="/static/dfs-api.pdf">使用文档</a>
 </div>
 </body>
 </html>
