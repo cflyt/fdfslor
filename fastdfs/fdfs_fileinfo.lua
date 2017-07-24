@@ -144,15 +144,16 @@ local function IS_UPPER_HEX(ch)
     return ((ch >= '0' and ch <= '9') or (ch >= 'A' and ch <= 'F'))
 end
 
-local function IS_TRUNK_FILE(file_size)
-    return bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE) ~= 0
+local function IS_TRUNK_FILE(filename_len, file_size)
+    return filename_len == FDFS_TRUNK_FILENAME_LENGTH_NO_PATH and
+        bit.band(file_size, FDFS_TRUNK_FILE_MARK_SIZE) ~= 0
 end
 
 local function IS_SLAVE_FILE(filename_len, file_size)
     --return ((filename_len > FDFS_TRUNK_LOGIC_FILENAME_LENGTH) or
-    --(filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(file_size)))
+    --(filename_len > FDFS_NORMAL_LOGIC_FILENAME_LENGTH and not IS_TRUNK_FILE(filename_len, file_size)))
     return ((filename_len > FDFS_TRUNK_FILENAME_LENGTH_NO_PATH) or
-    (filename_len > FDFS_NORMAL_FILENAME_LENGTH_NO_PATH and not IS_TRUNK_FILE(file_size)))
+    (filename_len > FDFS_NORMAL_FILENAME_LENGTH_NO_PATH and not IS_TRUNK_FILE(filename_len, file_size)))
 end
 
 local function IS_APPENDER_FILE(file_size)
@@ -208,13 +209,13 @@ function _M.get_fileinfo_ex(filename_without_path)
 
     local is_slave = IS_SLAVE_FILE(filename_len, filesize_1)
     local is_appender = IS_APPENDER_FILE(filesize_1)
-    if (is_appender) then
+    if is_appender or is_slave then
         -- ngx.log(ngx.ERR, "IS A appender FILE")
         filesize = -1
     end
 
     -- ngx.log(ngx.ERR, "filesize :" , filesize)
-    local is_trunk = IS_TRUNK_FILE(filesize_1)
+    local is_trunk = IS_TRUNK_FILE(filename_len, filesize_1)
     if bit.arshift(filesize, 63) ~= 0 then
         filesize = bit.band(filesize, 0xFFFFFFFF) -- low 32 bits is file size
     elseif is_trunk then
@@ -239,7 +240,7 @@ function _M.get_fileinfo_ex(filename_without_path)
     if is_trunk then
         local filename = string.sub(filename_ori, FDFS_FILENAME_BASE64_LENGTH+1,
                     FDFS_FILENAME_BASE64_LENGTH + FDFS_TRUNK_FILE_INFO_LEN)
-        if string.len(filename) == FDFS_TRUNK_FILE_INFO_LEN  then
+        if string.len(filename) == FDFS_TRUNK_FILE_INFO_LEN then
             filename = base64:base64_decode_auto(filename)
             offset = 1
             local trunk_id_str = string.sub(filename, offset, offset+3)

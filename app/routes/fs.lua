@@ -279,7 +279,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
             end
 
-            if fileinfo.is_appender then
+            if fileinfo.is_slave or fileinfo.is_appender then
                 fp:seek("set", 0)
                 filesize = fp:seek("end")
             end
@@ -328,7 +328,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local errno = nil
     if not is_exist_file then
         --appender file need get filesize from server
-        if fileinfo.is_appender then
+        if fileinfo.is_slave or fileinfo.is_appender then
             local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
             if update_info then
                 filesize = update_info.filesize
@@ -344,6 +344,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             start = 0
             stop = filesize
         end
+
         reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr)
         errno = len -- if failed, #2 return value marks status
     end
