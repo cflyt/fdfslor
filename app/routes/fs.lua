@@ -243,13 +243,13 @@ local function get_full_path_file(store_path_str, high_dir, low_dir, filename, f
                                 high_dir,
                                 low_dir,
                                 filename)
-    --ngx.log(ngx.ERR, full_filepath)
+    ngx.log(ngx.DEBUG, "full file path:", full_filepath)
     return full_filepath
 end
 
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
-    --ngx.log(ngx.ERR, tostring(req.range))
-    ngx.log(ngx.ERR, utils.dump(req.params))
+    ngx.log(ngx.DEBUG, tostring(req.range))
+    ngx.log(ngx.DEBUG, utils.dump(req.params))
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     local start, stop = 0, 0
     if req.range then
@@ -308,7 +308,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 else
                     res:status(200)
                 end
-                --ngx.log(ngx.ERR, "start:", start, "stop:", stop, "offset:", offset)
+                ngx.log(ngx.DEBUG, "start:", start, "stop:", stop, "offset:", offset)
                 sendfile(full_file_path, offset, stop-start)
                 return
             end
