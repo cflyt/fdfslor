@@ -47,6 +47,10 @@ function Response:json(data, empty_table_as_object)
     self:_send(utils.json_encode(data, empty_table_as_object))
 end
 
+function Response:internal_redirect(url, args)
+    ngx.exec(url, args)
+end
+
 function Response:redirect(url, code, query)
     if url and not code and not query then -- only one param
         ngx.redirect(url)
