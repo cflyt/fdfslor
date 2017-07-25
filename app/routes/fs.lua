@@ -206,7 +206,7 @@ local function get_source_ip_port(fileinfo)
     return source_ip_addr, source_port
 end
 
-local function is_local_file(source_ip_addr)
+local function is_local_ip(source_ip_addr)
     if not source_ip_addr or source_ip_addr == "" then
         return false
     end
@@ -224,7 +224,7 @@ local function is_local_file(source_ip_addr)
         return true
     else
         return false
-    end;
+    end
 end
 
 local function get_full_path_file(store_path_str, high_dir, low_dir, filename, fileinfo)
@@ -266,13 +266,16 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local filesize = fileinfo.filesize
     local reader, len ,err
     local is_exist_file = false
+    local is_local_host = false
     local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
+
     local fp, err = io.open(full_file_path, "rb")
     if fp then --file exist local
         local create_time = fileinfo.timestamp
         local now = ngx.now()
         local elapse = now - create_time
-        if is_local_file(source_ip_addr) or elapse > FILE_SYNC_MAX_TIME then
+        is_local_host = is_local_ip(source_ip_addr)
+        if is_local_host or elapse > FILE_SYNC_MAX_TIME then
             local offset = 0
             if fileinfo.is_trunk then
                 offset = fileinfo.offset or 0
@@ -327,6 +330,15 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
 
     local errno = nil
     if not is_exist_file then
+        if not is_local_host then
+            if config.remote_response_mode == "redirect" then
+                ngx.log(ngx.DEBUG, "redirect response")
+                return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
+            elseif config.remote_response_mode == "proxy" then
+                ngx.log(ngx.DEBUG, "proxy response")
+                return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
+            end
+        end
         --appender file need get filesize from server
         if fileinfo.is_slave or fileinfo.is_appender then
             local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
@@ -345,6 +357,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             stop = filesize
         end
 
+        ngx.log(ngx.DEBUG, "storage response")
         reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr)
         errno = len -- if failed, #2 return value marks status
     end
@@ -379,8 +392,8 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         end
         ngx.eof()
     end
-
 end)
+
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")

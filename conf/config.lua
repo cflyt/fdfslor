@@ -4,6 +4,10 @@ local _M = {}
 
 _M.file_sync_max_time = 86400
 
+_M.remote_response_mode = "proxy"
+--_M.remote_response_mode = "redirect"
+--_M.remote_response_mode = "storage"
+
 _M.trackers = {
     { host="192.168.56.12", port=22122},
     { host="192.168.56.10", port=22122},
