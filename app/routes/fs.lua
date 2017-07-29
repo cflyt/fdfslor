@@ -306,8 +306,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                     req.range.start = start
                     req.range.stop = stop
                     res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+                    res:set_header("Cache-Control", "max-age=315360000")
                     res:status(206)
                 else
+                    res:set_header("Cache-Control", "max-age=315360000")
                     res:status(200)
                 end
                 ngx.log(ngx.DEBUG, "start:", start, "stop:", stop, "offset:", offset)
@@ -374,8 +376,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         req.range.start = start
         req.range.stop = stop
         res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+        res:set_header("Cache-Control", "max-age=315360000")
         res:status(206)
     else
+        res:set_header("Cache-Control", "max-age=315360000")
         res:status(200)
     end
     if len == 0 then
