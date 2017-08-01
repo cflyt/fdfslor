@@ -397,6 +397,85 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     end
 end)
 
+fsRouter:head("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
+    ngx.log(ngx.DEBUG, tostring(req.range))
+    ngx.log(ngx.DEBUG, utils.dump(req.params))
+    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    local start, stop = 0, 0
+    if req.range then
+        start = req.range.start
+        stop = req.range.stop
+    end
+
+    local fileinfo, err = fsinfo.get_fileinfo_ex(req.params.filename)
+    if not fileinfo then
+        res:status(404):send("Not Fount")
+        return
+    end
+    local source_ip_addr = get_source_ip_port(fileinfo)
+    local filesize = fileinfo.filesize
+    local reader, len ,err
+    local is_exist_file = false
+    local is_local_host = is_local_ip(source_ip_addr)
+    local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
+
+    local fp, err = io.open(full_file_path, "rb")
+    if fp then --file exist local
+        if fileinfo.is_slave or fileinfo.is_appender then
+            fp:seek("set", 0)
+            filesize = fp:seek("end")
+        end
+        fp:close()
+    else
+        if not is_local_host then
+            if config.remote_response_mode == "redirect" then
+                ngx.log(ngx.DEBUG, "redirect response")
+                return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
+            elseif config.remote_response_mode == "proxy" then
+                ngx.log(ngx.DEBUG, "proxy response")
+                return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
+            end
+        end
+        --appender file need get filesize from server
+        if fileinfo.is_slave or fileinfo.is_appender then
+            local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
+            if update_info then
+                filesize = update_info.filesize
+            end
+        end
+    end
+
+    if req.range then
+        start, stop = req.range:range_for_length(filesize)
+        if not start then
+            res:status(400):send("Invalid Range")
+            return
+        end
+    else
+        start = 0
+        stop = filesize
+    end
+
+    res:set_header("Content-Length", stop-start)
+    res:set_header("Cache-Control", "max-age=315360000")
+    res:set_header("Source-Ip-Addr",  source_ip_addr)
+    res:set_header("Is-Trunk",  tostring(fileinfo.is_trunk))
+    res:set_header("Is-Appender",  tostring(fileinfo.is_appender))
+    res:set_header("Is-Slave",  tostring(fileinfo.is_slave))
+    res:set_header("Create-Time",  os.date("%c", fileinfo.timestamp))
+    if req.range then
+        req.range.start = start
+        req.range.stop = stop
+        res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+        res:status(206)
+    else
+        res:status(200)
+    end
+
+    ngx.eof()
+
+end)
+
 
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
