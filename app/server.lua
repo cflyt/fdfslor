@@ -25,7 +25,6 @@ app:use(mw_inject_version())
 
 -- 自定义中间件2: 设置响应头
 app:use(function(req, res, next)
-    res:set_header("X-Powered-By", "Lor framework")
     res:set_header("Accept-Ranges", "bytes")
     next()
 end)
@@ -37,8 +36,7 @@ app:erroruse(function(err, req, res, next)
     ngx.log(ngx.ERR, err)
 
     if req:is_found() ~= true then
-        if string_find(req.headers["Accept"], "application/json") then
-            ngx.log(ngx.ERR, "i am bbbbbbbbb")
+        if string_find(req.headers["Accept"] or "", "application/json") then
             res:status(404):json({
                 success = false,
                 msg = "404! sorry, not found."
@@ -47,7 +45,7 @@ app:erroruse(function(err, req, res, next)
             res:status(404):send("404! sorry, not found. " .. (req.path or ""))
         end
     else
-        if string_find(req.headers["Accept"], "application/json") then
+        if string_find(req.headers["Accept"] or "", "application/json") then
             res:status(500):json({
                 success = false,
                 msg = "500! internal error, please check the log."
