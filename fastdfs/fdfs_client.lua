@@ -96,7 +96,7 @@ function _M.do_upload(self, group, reader, file_size, ext_name, chunk_size)
 
     local reader = reader
     if not reader then
-        return nil, "reader is nil"
+        return nil, "upload reader is nil"
     end
 
     if not file_size or file_size <= 0 then
@@ -156,65 +156,55 @@ function _M.do_upload_appender(self, gourp, reader, filesize, ext_name, chunk_si
 end
 
 
-function _M.do_delete(self, fileid)
-    local storage = self:query_update_storage(fileid)
-    if not storage then
-        return nil
+function _M.do_delete(self, fileid, storage_id)
+    local storage = nil
+    local st_conn, err = nil, nil
+    if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
+        storage = {host=storage_ip}
+        st_conn, err = self:get_storage(storage)
     end
-    local out = {}
-    table.insert(out, long2buf(16 + string.len(storage.file_name)))
-    table.insert(out, string.char(STORAGE_PROTO_CMD_DELETE_FILE))
-    table.insert(out, "\00")
-    -- group name
-    table.insert(out, fix_string(storage.group_name, 16))
-    -- file name
-    table.insert(out, storage.file_name)
-    -- init socket
-    local sock, err = ngx.socket.tcp()
-    if not sock then
-        return nil, err
+    if not st_conn then
+        local tk,err = self:get_tracker()
+        if not tk then
+            return nil, err
+        end
+        storage = tk:query_storage_fetch1(fileid)
+        if not storage then
+            return nil, "can't query storage"
+        end
+
+        st_conn, err = self:get_storage(storage)
+        if not st_conn then
+            return nil, err
+        end
     end
-    sock:settimeout(self.timeout)
-    local ok, err = sock:connect(storage.host, storage.port)
-    if not ok then
-        return nil, err
-    end
-    local bytes, err = sock:send(out)
-    if not bytes then
-        ngx.log(ngx.ngx.ERR, "fdfs: send body error")
-        sock:close()
-        ngx.exit(500)
-    end
-    -- read request header
-    local hdr = read_fdfs_header(sock)
-    local keepalive = self.storage_keepalive
-    if keepalive then
-        sock:setkeepalive(keepalive.timeout, keepalive.size)
-    end
-    return hdr
+
+    return st_conn:delete_file1(fileid)
 end
+
 
 function _M.do_download(self, fileid, start, stop, storage_ip)
     local storage = nil
+    local st_conn, err = nil, nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
+        st_conn, err = self:get_storage(storage)
     end
-
-    if not storage then
+    if not st_conn then
         local tk,err = self:get_tracker()
         if not tk then
             return nil, nil, err
         end
         storage = tk:query_storage_fetch1(fileid)
-    end
+        if not storage then
+            return nil, nil, "can't query storage"
+        end
 
-    if not storage then
-        return nil, nil, "can't query storage"
-    end
+        st_conn, err = self:get_storage(storage)
+        if not st_conn then
+            return nil, nil, err
+        end
 
-    local st_conn, err = self:get_storage(storage)
-    if not st_conn then
-        return nil, nil, err
     end
 
     local chunk_size = default_chunk_size or 1024 * 64
@@ -309,25 +299,27 @@ end
 
 function _M.get_fileinfo_from_storage(self, fileid, storage_ip)
     local storage = nil
+    local st_conn, err = nil, nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
+        st_conn, err = self:get_storage(storage)
     end
-    if not storage then
-        local tk, err = self:get_tracker()
+    if not st_conn then
+        local tk,err = self:get_tracker()
         if not tk then
             return nil, err
         end
         storage = tk:query_storage_update1(fileid)
-    end
-    if not storage then
-        return nil, "can't query storage"
-    end
+        if not storage then
+            return nil, "can't query storage"
+        end
 
-    local st_conn, err = self:get_storage(storage)
-    if not st_conn then
-        return nil, err
-    end
+        st_conn, err = self:get_storage(storage)
+        if not st_conn then
+            return nil, err
+        end
 
+    end
     --send data
     return st_conn:get_file_info1(fileid)
 end

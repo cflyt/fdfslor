@@ -278,6 +278,19 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             local offset = 0
             if fileinfo.is_trunk then
                 offset = fileinfo.offset or 0
+                fp:seek("set", offset)
+                local trunk_header = fp:read(FDFS_TRUNK_FILE_HEADER_SIZE)
+                --ngx.log(ngx.ERR, "trunk header:", trunk_header)
+                if string.len(trunk_header) ~= FDFS_TRUNK_FILE_HEADER_SIZE then
+                    res:status(404):send("File Not Found")
+                    return
+                end
+                local file_type = string.sub(trunk_header, 1, 1)
+                --ngx.log(ngx.ERR, "file type:", file_type)
+                if file_type == '\0' then
+                    res:status(404):send("File Not Found")
+                    return
+                end
                 offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
             end
 
@@ -487,6 +500,29 @@ fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req,
     else
         res:status(400)
         res:send("Cann't Get File Info")
+    end
+end)
+
+
+fsRouter:delete("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
+    local token = req:args().token
+    if not token then
+        --ngx.exit(403)
+        res:status(403)
+        res:send("Require Token")
+        return
+    end
+    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    local ok, err = fdfs:do_delete(fileid, source_ip_addr)
+    res:status(200)
+    if ok then
+        local json_str = '{"status": 0}'
+        res:set_header("Content-Length", string.len(json_str))
+        res:send(json_str)
+    else
+        local json_str = string.format('{"status": -1, "err": %s}', err)
+        res:set_header("Content-Length", string.len(json_str))
+        res:send(json_str)
     end
 end)
 
