@@ -267,78 +267,82 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local reader, len ,err
     local is_exist_file = false
     local is_local_host = is_local_ip(source_ip_addr)
-    local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
 
-    local fp, err = io.open(full_file_path, "rb")
-    if fp then --file exist local
-        local create_time = fileinfo.timestamp
-        local now = ngx.now()
-        local elapse = now - create_time
-        if is_local_host or elapse > FILE_SYNC_MAX_TIME then
-            local offset = 0
-            if fileinfo.is_trunk then
-                offset = fileinfo.offset or 0
-                fp:seek("set", offset)
-                local trunk_header = fp:read(FDFS_TRUNK_FILE_HEADER_SIZE)
-                --ngx.log(ngx.ERR, "trunk header:", trunk_header)
-                if string.len(trunk_header) ~= FDFS_TRUNK_FILE_HEADER_SIZE then
-                    res:status(404):send("File Not Found")
-                    return
+    if config.group_name and req.params.group_id ~= config.group_name and req.params.group_id ~= "" then -- file not belong to this group
+        is_exist_file = false
+    else
+        local full_file_path = get_full_path_file(req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename, fileinfo)
+        local fp, err = io.open(full_file_path, "rb")
+        if fp then --file exist local
+            local create_time = fileinfo.timestamp
+            local now = ngx.now()
+            local elapse = now - create_time
+            if is_local_host or elapse > FILE_SYNC_MAX_TIME then
+                local offset = 0
+                if fileinfo.is_trunk then
+                    offset = fileinfo.offset or 0
+                    fp:seek("set", offset)
+                    local trunk_header = fp:read(FDFS_TRUNK_FILE_HEADER_SIZE)
+                    --ngx.log(ngx.ERR, "trunk header:", trunk_header)
+                    if string.len(trunk_header) ~= FDFS_TRUNK_FILE_HEADER_SIZE then
+                        res:status(404):send("File Not Found")
+                        return
+                    end
+                    local file_type = string.sub(trunk_header, 1, 1)
+                    --ngx.log(ngx.ERR, "file type:", file_type)
+                    if file_type == '\0' then
+                        res:status(404):send("File Not Found")
+                        return
+                    end
+                    offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
                 end
-                local file_type = string.sub(trunk_header, 1, 1)
-                --ngx.log(ngx.ERR, "file type:", file_type)
-                if file_type == '\0' then
-                    res:status(404):send("File Not Found")
-                    return
-                end
-                offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
-            end
 
-            if fileinfo.is_slave or fileinfo.is_appender then
-                fp:seek("set", 0)
-                filesize = fp:seek("end")
-            end
-            if req.range then
-                start, stop = req.range:range_for_length(filesize)
-                if not start then
-                    res:status(400):send("Invalid Range")
-                    return
+                if fileinfo.is_slave or fileinfo.is_appender then
+                    fp:seek("set", 0)
+                    filesize = fp:seek("end")
                 end
-            else
-                start = 0
-                stop = filesize
-            end
-            offset = offset + start
-
-            --directly use sendfile zero copy
-            if sendfile then
-                ngx.log(ngx.DEBUG, "local file, use sendfile")
-                fp:close()
-                res:set_header("Content-Length", stop-start)
                 if req.range then
-                    req.range.start = start
-                    req.range.stop = stop
-                    res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
-                    res:set_header("Cache-Control", "max-age=315360000")
-                    res:status(206)
+                    start, stop = req.range:range_for_length(filesize)
+                    if not start then
+                        res:status(416):send("Invalid Range")
+                        return
+                    end
                 else
-                    res:set_header("Cache-Control", "max-age=315360000")
-                    res:status(200)
+                    start = 0
+                    stop = filesize
                 end
-                ngx.log(ngx.DEBUG, "start:", start, "stop:", stop, "offset:", offset)
-                sendfile(full_file_path, offset, stop-start)
-                return
-            end
+                offset = offset + start
 
-            ngx.log(ngx.DEBUG, "local file, use file:read()")
-            --use file:read
-            fp:seek("set", offset)
-            reader = utils.make_reader(fp, chunk_size, stop-start,
-                    function(fp)
-                        fp:close()
-                     end)
-            len = stop - start
-            is_exist_file = true
+                --directly use sendfile zero copy
+                if sendfile then
+                    ngx.log(ngx.DEBUG, "local file, use sendfile")
+                    fp:close()
+                    res:set_header("Content-Length", stop-start)
+                    if req.range then
+                        req.range.start = start
+                        req.range.stop = stop
+                        res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
+                        res:set_header("Cache-Control", "max-age=315360000")
+                        res:status(206)
+                    else
+                        res:set_header("Cache-Control", "max-age=315360000")
+                        res:status(200)
+                    end
+                    ngx.log(ngx.DEBUG, "start:", start, "stop:", stop, "offset:", offset)
+                    sendfile(full_file_path, offset, stop-start)
+                    return
+                end
+
+                ngx.log(ngx.DEBUG, "local file, use file:read()")
+                --use file:read
+                fp:seek("set", offset)
+                reader = utils.make_reader(fp, chunk_size, stop-start,
+                        function(fp)
+                            fp:close()
+                         end)
+                len = stop - start
+                is_exist_file = true
+            end
         end
     end
 
@@ -363,7 +367,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         if req.range then
             start, stop = req.range:range_for_length(filesize)
             if not start then
-                res:status(400):send("Invalid Range")
+                res:status(416):send("Invalid Range")
                 return
             end
         else
@@ -378,7 +382,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
 
     if not reader then
         if errno then
-            res:status(404):send("File Not Found, Err ", errno)
+            res:status(404):send("File Not Found, Err " .. errno)
         else
             res:status(500):send("Can't Read, Err:".. err)
         end
