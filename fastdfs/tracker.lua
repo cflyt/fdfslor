@@ -75,14 +75,14 @@ function connect(self, opts)
     if not sock then
         return nil, "not initialized"
     end
+    if self.timeout then
+        sock:settimeout(self.timeout)
+    end
     local host = opts.host
     local port = opts.port or 22122
     local ok, err = sock:connect(host, port)
     if not ok then
         return nil, err
-    end
-    if self.timeout then
-        sock:settimeout(self.timeout)
     end
     return 1
 end

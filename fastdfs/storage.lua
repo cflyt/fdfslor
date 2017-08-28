@@ -46,16 +46,12 @@ local STORAGE_SET_METADATA_FLAG_OVERWRITE = 'O'
 local mt = { __index = _M }
 local default_chunk_size = 1024 * 32
 
-function new(self, store_info, timeout, keepalive)
+function new(self, timeout, keepalive)
     local sock, err = tcp()
     if not sock then
         return nil, err
     end
     return setmetatable({
-        --group_name=store_info.group_name,
-        --store_path_index=store_info.store_path_index,
-        --host=store_info.host
-        --port=store_info.port,
         sock = sock,
         timeout = timeout,
         keepalive=keepalive }, mt)
@@ -65,6 +61,9 @@ function connect(self, opts)
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
+    end
+    if self.timeout then
+        sock:settimeout(self.timeout)
     end
 
     self.group_name = opts.group_name
@@ -76,9 +75,7 @@ function connect(self, opts)
     if not ok then
         return nil, err
     end
-    if self.timeout then
-        sock:settimeout(self.timeout)
-    end
+
     return true
 end
 
