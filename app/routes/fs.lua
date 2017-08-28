@@ -25,6 +25,9 @@ fdfs:set_storage_keepalive(config.storage_keepalive)
 
 local FDFS_FILE_EXT_NAME_MAX_LEN =  6
 local FDFS_TRUNK_FILE_HEADER_SIZE = 17 + FDFS_FILE_EXT_NAME_MAX_LEN + 1
+local FDFS_TRUNK_FILE_TYPE_NONE =    '\0'
+local FDFS_TRUNK_FILE_TYPE_REGULAR  = 'F'
+local FDFS_TRUNK_FILE_TYPE_LINK   =  'L'
 
 local default_chunk_size = 32*1024
 
@@ -290,8 +293,11 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                     end
                     local file_type = string.sub(trunk_header, 1, 1)
                     --ngx.log(ngx.ERR, "file type:", file_type)
-                    if file_type == '\0' then
+                    if file_type == FDFS_TRUNK_FILE_TYPE_NONE then
                         res:status(404):send("File Not Found")
+                        return
+                    elseif file_type ~= FDFS_TRUNK_FILE_TYPE_REGULAR and file_type ~= FDFS_TRUNK_FILE_TYPE_LINK then
+                        res:status(404):send("File Type Invalid")
                         return
                     end
                     offset = offset + FDFS_TRUNK_FILE_HEADER_SIZE
