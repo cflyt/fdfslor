@@ -29,7 +29,7 @@ end
 ---- @param string str
 ---- @return string
 local function _trim(str)
-    return str or (string.gsub(str, "^%s*(.-)%s*$", "%1"))
+    return str and (string.gsub(str, "^%s*(.-)%s*$", "%1"))
 end
 
 

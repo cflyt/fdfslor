@@ -73,6 +73,11 @@ function Request:new()
     local range = nil
     if headers["Range"] then
         range = Range:parse(headers["Range"])
+        if not range then
+            ngx.status = 400
+            ngx.say("Bad Range Header")
+            ngx.exit(400)
+        end
     end
 
     local content_type = ngx.var.content_type
