@@ -23,6 +23,7 @@ fdfs:set_trackers(config.trackers)
 fdfs:set_tracker_keepalive(config.tracker_keepalive)
 fdfs:set_storage_keepalive(config.storage_keepalive)
 
+local FDFS_LOGIC_FILE_NAME_MAX_LEN = 128
 local FDFS_FILE_EXT_NAME_MAX_LEN =  6
 local FDFS_TRUNK_FILE_HEADER_SIZE = 17 + FDFS_FILE_EXT_NAME_MAX_LEN + 1
 local FDFS_TRUNK_FILE_TYPE_NONE =    '\0'
@@ -167,7 +168,13 @@ fsRouter:patch("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, r
         reader = req:body_reader(default_chunk_size)
         filesize = req.content_length
     end
-    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        res:status(404):send("Not Fount")
+        return
+    end
+    local fileid = table.concat( {req.params.group_id, logic_filename}, "/")
+
     --local re, err = fdfs:do_upload2(reader, filesize, ext_name, default_chunk_size)
     local re, err = fdfs:do_append(fileid, reader, filesize, default_chunk_size)
     if not re then
@@ -253,7 +260,12 @@ end
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     ngx.log(ngx.DEBUG, tostring(req.range))
     ngx.log(ngx.DEBUG, utils.dump(req.params))
-    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        res:status(404):send("Not Fount")
+        return
+    end
+    local fileid = table.concat( {req.params.group_id, logic_filename}, "/")
     local start, stop = 0, 0
     if req.range then
         start = req.range.start
@@ -423,7 +435,12 @@ end)
 fsRouter:head("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     ngx.log(ngx.DEBUG, tostring(req.range))
     ngx.log(ngx.DEBUG, utils.dump(req.params))
-    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        res:status(404):send("Not Fount")
+        return
+    end
+    local fileid = table.concat( {req.params.group_id, logic_filename}, "/")
     local start, stop = 0, 0
     if req.range then
         start = req.range.start
@@ -494,7 +511,6 @@ fsRouter:head("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, re
     else
         res:status(200)
     end
-
     ngx.eof()
 
 end)
@@ -522,7 +538,13 @@ fsRouter:delete("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, 
         res:send("Require Token")
         return
     end
-    local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+
+    local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
+    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        res:status(404):send("Not Fount")
+        return
+    end
+    local fileid = table.concat( {req.params.group_id, logic_filename}, "/")
     local ok, err = fdfs:do_delete(fileid, source_ip_addr)
     res:status(200)
     if ok then

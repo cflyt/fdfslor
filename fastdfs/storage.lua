@@ -22,6 +22,7 @@ module(...)
 
 local VERSION = '0.2.0'
 
+local FDFS_LOGIC_FILE_NAME_MAX_LEN = 128
 local FDFS_PROTO_PKG_LEN_SIZE = 8
 local FDFS_FILE_EXT_NAME_MAX_LEN = 6
 local FDFS_FILE_PREFIX_MAX_LEN = 16
@@ -344,6 +345,9 @@ end
 
 -- build upload_slave_request method
 local function build_upload_slave_request(cmd, file_name, prefix, size, ext)
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
     local req = {}
     table.insert(req, int2buf(16 + FDFS_FILE_PREFIX_MAX_LEN + FDFS_FILE_EXT_NAME_MAX_LEN + string.len(file_name) + size))
     table.insert(req, string.char(cmd))
@@ -405,11 +409,15 @@ end
 -- build request
 local function build_request(cmd, group_name, file_name)
     if not group_name then
-        return nil, "not group_name"
+        return nil, "no group_name"
     end
     if not file_name then
-        return nil, "not file_name"
+        return nil, "no file_name"
     end
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
+
     local req = {}
     table.insert(req, int2buf(16 + string.len(file_name)))
     table.insert(req, string.char(cmd))
@@ -543,11 +551,15 @@ end
 -- build download request
 local function build_download_request(cmd, group_name, file_name, start, stop)
     if not group_name then
-        return nil, "not group_name"
+        return nil, "no group_name"
     end
     if not file_name then
-        return nil, "not file_name"
+        return nil, "no file_name"
     end
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
+
     local req = {}
     table.insert(req, int2buf(32 + string.len(file_name)))
     table.insert(req, string.char(cmd))
@@ -690,6 +702,10 @@ local function build_append_request(cmd, group_name, file_name, size)
     if not file_name then
         return nil, "not file_name"
     end
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
+
     local file_name_len = string.len(file_name)
     local req = {}
     table.insert(req, int2buf(16 + size + file_name_len))
@@ -770,6 +786,10 @@ local function build_modify_request(cmd, file_name, offset, size)
         return nil, "not file_name"
     end
     local file_name_len = string.len(file_name)
+    if file_name_len > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
+
     local req = {}
     table.insert(req, int2buf(size + file_name_len + 24))
     table.insert(req, string.char(STORAGE_PROTO_CMD_MODIFY_FILE))

@@ -17,6 +17,7 @@ module(...)
 
 local VERSION = '0.2.1'
 
+local FDFS_LOGIC_FILE_NAME_MAX_LEN = 128
 local FDFS_PROTO_PKG_LEN_SIZE = 8
 local FDFS_FILE_EXT_NAME_MAX_LEN = 6
 local FDFS_PROTO_CMD_QUIT = 82
@@ -144,6 +145,9 @@ function query_storage_store(self, group_name)
 end
 
 function query_storage_update(self, group_name, file_name)
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
@@ -183,6 +187,9 @@ function query_storage_update(self, group_name, file_name)
 end
 
 function query_storage_fetch(self, group_name, file_name)
+    if string.len(file_name) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+        return nil, "file name too long > " .. FDFS_LOGIC_FILE_NAME_MAX_LEN
+    end
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
