@@ -17,6 +17,7 @@ local fdfs = fdfsClient:new()
 local config = require("conf.config")
 local storage_ids = config.storage_ids
 local store_paths = config.store_paths
+local storage_change_ip_history_map = config.storage_change_ip_history_map
 local FILE_SYNC_MAX_TIME = config.file_sync_max_time
 fdfs:set_timeout(config.tracker_timeout)
 fdfs:set_trackers(config.trackers)
@@ -212,6 +213,10 @@ local function get_source_ip_port(fileinfo)
     end
     if not source_ip_addr or source_ip_addr == "" then
         return nil,nil
+    end
+    if storage_change_ip_history_map then
+        source_ip_addr = storage_change_ip_history_map[source_ip_addr] or source_ip_addr
+        ngx.log(ngx.DEBUG, 'source ip addr: ', source_ip_addr)
     end
     return source_ip_addr, source_port
 end
