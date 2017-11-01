@@ -206,7 +206,7 @@ local function get_source_ip_port(fileinfo)
         if not fileinfo.source_id or fileinfo.source_id == "" then
             return nil,nil
         end
-        if storage_ids[fileinfo.source_id] then
+        if type(storage_ids) == "table" and storage_ids[fileinfo.source_id] then
             source_ip_addr = storage_ids[fileinfo.source_id].ip
             source_port = storage_ids[fileinfo.source_id].port
         end
@@ -214,7 +214,7 @@ local function get_source_ip_port(fileinfo)
     if not source_ip_addr or source_ip_addr == "" then
         return nil,nil
     end
-    if storage_change_ip_history_map then
+    if type(storage_change_ip_history_map) == "table" then
         source_ip_addr = storage_change_ip_history_map[source_ip_addr] or source_ip_addr
         ngx.log(ngx.DEBUG, 'source ip addr: ', source_ip_addr)
     end
