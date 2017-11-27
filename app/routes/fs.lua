@@ -524,6 +524,10 @@ end)
 fsRouter:get("info/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     local fileid = table.concat( {req.params.group_id,req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     local fileinfo = fsinfo.get_fileinfo(fileid)
+    local source_ip_addr = get_source_ip_port(fileinfo)
+    if fileinfo and source_ip_addr then
+        fileinfo["source_ip_addr"] = source_ip_addr
+    end
     -- local fileinfo = fdfs:get_fileinfo_from_storage(fileid)
     if fileinfo then
         res:status(200)
