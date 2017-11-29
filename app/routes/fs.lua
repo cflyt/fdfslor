@@ -38,6 +38,32 @@ local function _getextension(filename)
     return smatch(filename, ".+%.(%w+)$")
 end
 
+--data filename format:
+--MHH/HH/HH/filename: HH for 2 uppercase hex chars
+local function fdfs_check_data_filename(filename)
+    local len = string.len(filename)
+    if len < 10 then
+        ngx.log(ngx.ERR, string.format("the length=%d of filename \"%s\" is too short", len, filename))
+        return false
+    end
+    if string.sub(filename,1,1) ~= 'M' or
+            not utils.is_upper_hex(string.sub(filename,2,2)) or
+            not utils.is_upper_hex(string.sub(filename, 3, 3)) or
+            string.sub(filename,4, 4) ~= '/' or
+            not utils.is_upper_hex(string.sub(filename,5,5 )) or
+            not utils.is_upper_hex(string.sub(filename, 6,6)) or
+            string.sub(filename,7, 7) ~= '/' or
+            not utils.is_upper_hex(string.sub(filename,8,8 )) or
+            not utils.is_upper_hex(string.sub(filename, 9,9)) or
+            string.sub(filename,10, 10) ~= '/' then
+
+        ngx.log(ngx.ERR, string.format('the format of filename "%s" is invalid', filename))
+        return false
+    end
+
+    return true
+end
+
 fsRouter:post("/file/new/", function(req, res, next)
     local reader = nil
     local filesize = 0
@@ -266,7 +292,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     ngx.log(ngx.DEBUG, tostring(req.range))
     ngx.log(ngx.DEBUG, utils.dump(req.params))
     local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
-    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN then
+    if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN or not fdfs_check_data_filename(logic_filename) then
         res:status(404):send("Not Fount")
         return
     end

@@ -191,4 +191,9 @@ function _M.dump(o)
    end
 end
 
+function _M.is_upper_hex(ch)
+    return ((string.byte(ch) >= string.byte('0') and  string.byte(ch) <= string.byte('9')))
+        or ((string.byte(ch) >= string.byte('A') and string.byte(ch) <= string.byte('F')))
+end
+
 return _M
