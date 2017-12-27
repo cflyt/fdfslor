@@ -81,7 +81,7 @@ end
 
 
 function _M.get_storage(self, store_info)
-    local st = fdfs_storage:new(self.timeout, self.storage_keep_alive)
+    local st = fdfs_storage:new(self.timeout, self.storage_keepalive)
     local ok, err = st:connect(store_info)
     if not ok then
         return nil, err
