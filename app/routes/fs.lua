@@ -580,6 +580,13 @@ fsRouter:delete("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, 
         return
     end
     local fileid = table.concat( {req.params.group_id, logic_filename}, "/")
+    local fileinfo, err = fsinfo.get_fileinfo_ex(req.params.filename)
+    if not fileinfo then
+        res:status(404):send("Not Fount")
+        return
+    end
+
+    local source_ip_addr = get_source_ip_port(fileinfo)
     local ok, err = fdfs:do_delete(fileid, source_ip_addr)
     res:status(200)
     if ok then

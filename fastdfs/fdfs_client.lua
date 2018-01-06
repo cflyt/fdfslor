@@ -156,7 +156,8 @@ function _M.do_upload_appender(self, gourp, reader, filesize, ext_name, chunk_si
 end
 
 
-function _M.do_delete(self, fileid, storage_id)
+function _M.do_delete(self, fileid, storage_ip)
+    ngx.log(ngx.DEBUG, "delete fileid ", fileid, " storage: ", storage_ip)
     local storage = nil
     local st_conn, err = nil, nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
@@ -164,6 +165,7 @@ function _M.do_delete(self, fileid, storage_id)
         st_conn, err = self:get_storage(storage)
     end
     if not st_conn then
+        ngx.log(ngx.ERR, "connect storage ", storage_ip, " failed, err: ", err)
         local tk,err = self:get_tracker()
         if not tk then
             return nil, err
