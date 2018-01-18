@@ -77,7 +77,11 @@ fsRouter:post("/file/new/", function(req, res, next)
             file:seek("set", 0)
             filesize = file:seek("end")
             file:seek("set", 0)
-            reader = utils.make_reader(file, default_chunk_size)
+            reader = utils.make_reader(file, default_chunk_size,
+                function(file)
+                    file:close()
+                end
+            )
         end
     else
         reader = req:body_reader(default_chunk_size)

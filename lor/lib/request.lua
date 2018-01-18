@@ -133,7 +133,7 @@ local function _multipart_formdata()
             success = false
             msg = "failed to read"
             ngx.log(ngx.ERR, "failed to read: ", err)
-            return nill, err
+            return nil, err
         end
         if typ == "header" then
             if res[1] == "Content-Disposition" then
@@ -166,6 +166,7 @@ local function _multipart_formdata()
                 post_args[last_key]["value"] = res
             end
         elseif typ == "part_end" then
+            file = nil
             readfile = false
         elseif typ == "eof" then
             break
