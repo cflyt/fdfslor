@@ -12,6 +12,7 @@ local read_fdfs_header = utils.read_fdfs_header
 local string = string
 local table  = table
 local date = os.date
+local ngx = ngx
 
 module(...)
 
@@ -399,7 +400,7 @@ function list_servers(self, group_name)
     if hdr.len > 0 then
         local body_len
         if self.v4 then
-            body_len = 600
+            body_len = 612
         else
             body_len = 584
         end
