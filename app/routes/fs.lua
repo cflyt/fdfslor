@@ -492,7 +492,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             if not reader and fileinfo.source_id
                     and fileinfo.source_id ~= ""
                     and type(storage_ids) == "table" then
-                ngx.log(ngx.ERR, "down load err, try next storage id, err ", err)
+                ngx.log(ngx.ERR, source_ip_addr, " down load err, try next storage id, err ", err)
                 local buddies_storage = get_buddy_storages_from_id(fileinfo.source_id)
                 ngx.log(ngx.DEBUG, "buddy storages  ", utils.dump(buddies_storage))
                 for i, b_id in pairs(buddies_storage) do
