@@ -40,6 +40,8 @@ local FDFS_STORAGE_STATUS_ONLINE = 6
 local FDFS_STORAGE_STATUS_ACTIVE = 7
 local FDFS_STORAGE_STATUS_RECOVERY = 9
 
+local ERROR_BODY_MAX_SIZE = 256
+
 local storage_status = {}
 storage_status[FDFS_STORAGE_STATUS_INIT]       = "INIT"
 storage_status[FDFS_STORAGE_STATUS_WAIT_SYNC]  = "WAIT_SYNC"
@@ -124,6 +126,18 @@ function query_storage_store(self, group_name)
         return nil, "read tracker header error:" .. err
     end
     -- read data
+    --
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track query store  error:" .. hdr.status
+    end
+
     if hdr.len > 0 then
         local res = {}
         local buf = sock:receive(hdr.len)
@@ -140,6 +154,12 @@ function query_storage_store(self, group_name)
 
         return res
     else
+         --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "not receive data"
     end
 end
@@ -173,6 +193,18 @@ function query_storage_update(self, group_name, file_name)
     if not hdr then
         return nil, "read tracker header error:" .. err
     end
+
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track query update storage  error:" .. hdr.status
+    end
+
     -- read data
     if hdr.len > 0 then
         local res = {}
@@ -180,8 +212,21 @@ function query_storage_update(self, group_name, file_name)
         res.group_name = strip_string(string.sub(buf, 1, 16))
         res.host       = strip_string(string.sub(buf, 17, 31))
         res.port       = buf2int(string.sub(buf, 32, 39))
+
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return res
     else
+         --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "not receive data"
     end
 end
@@ -215,6 +260,16 @@ function query_storage_fetch(self, group_name, file_name)
     if not hdr then
         return nil, "read tracker header error:" .. err
     end
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track query fetch storage  error:" .. hdr.status
+    end
     -- read data
     if hdr.len > 0 then
         local res = {}
@@ -222,8 +277,21 @@ function query_storage_fetch(self, group_name, file_name)
         res.group_name = strip_string(string.sub(buf, 1, 16))
         res.host       = strip_string(string.sub(buf, 17, 31))
         res.port       = buf2int(string.sub(buf, 32, 39))
+
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return res
     else
+         --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "error no:" .. hdr.status
     end
 end
@@ -266,6 +334,16 @@ function list_groups(self)
     if not hdr then
         return nil, "read tracker header error:" .. err
     end
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track list group  error:" .. hdr.status
+    end
     local body_len
     if self.v4 then
         body_len = 105
@@ -304,8 +382,21 @@ function list_groups(self)
             group.current_trunk_file_id, pos  = read_int(body, pos)
             table.insert(res.groups, group)
         end
+
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return res
     else
+         --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "response body is empty"
     end
 end
@@ -334,6 +425,17 @@ function list_one_group(self, group_name)
     if not hdr then
         return nil, "read tracker header error:" .. err
     end
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track list one group  error:" .. hdr.status
+    end
+
     local body_len
     if self.v4 then
         body_len = 105
@@ -366,8 +468,22 @@ function list_one_group(self, group_name)
         group.store_path_count, pos       = read_int(body, pos)
         group.subdir_count_per_path, pos  = read_int(body, pos)
         group.current_trunk_file_id, pos  = read_int(body, pos)
+
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return group
+
     else
+         --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "response body is empty"
     end
 end
@@ -396,6 +512,17 @@ function list_servers(self, group_name)
     if not hdr then
         return nil, "read tracker header error:" .. err
     end
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+        return nil, "track list servers  error:" .. hdr.status
+    end
+
     if hdr.len > 0 then
         local body_len
         if self.v4 then
@@ -494,8 +621,21 @@ function list_servers(self, group_name)
             server.if_trunk_server = string.byte(body, pos)
             table.insert(res.servers, server)
         end
+
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return res
     else
+        --keepalive
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "response body is empty"
     end
 end
