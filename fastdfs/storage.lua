@@ -120,9 +120,8 @@ function send_request_by_reader(self, req, reader, file_size, chunk_size)
             end
             local bytes, err = sock:send(chunk)
             if not bytes then
-                ngx.log(ngx.ngx.ERR, "fdfs: send body error")
                 sock:close()
-                ngx.exit(500)
+                return false, "fdfs: send body error"
             end
 
             --ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
@@ -130,9 +129,8 @@ function send_request_by_reader(self, req, reader, file_size, chunk_size)
         end
         if send_count ~= file_size then
             -- send file not full
-            ngx.log(ngx.ERR, "fdfs: send file body not full, send: " .. send_count, " file size: " .. file_size)
             sock:close()
-            ngx.exit(500)
+            return false, "fdfs: send file body not full, send " .. send_count .. " file size " .. file_size
         end
     end
     return true
