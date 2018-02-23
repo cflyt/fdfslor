@@ -442,8 +442,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
 
                 httpc:set_timeout(config.proxy_timeout or 5000)
                 httpc:proxy_response(httpc:proxy_request())
-                local keepalive = config.proxy_keepalive or {timeout=0, size=10}
-                httpc:set_keepalive(keepalive.timeout, keepalive.size)
+                local keepalive = config.proxy_keepalive
+                if keepalive then
+                    httpc:set_keepalive(keepalive.timeout, keepalive.size)
+                end
                 return
                 --return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
             end
