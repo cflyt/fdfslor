@@ -437,6 +437,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         if errno then
             res:status(404):send("File Not Found, Err " .. errno)
         else
+            ngx.log(ngx.ERR, "Download Failed, " ..  err)
             res:status(500):send("Can't Read, Err:".. err)
         end
         return
