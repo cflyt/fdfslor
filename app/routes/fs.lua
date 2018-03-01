@@ -442,6 +442,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                   return
                 end
 
+                ngx.req.set_header("Failover",  ngx.var.server_addr)
                 httpc:set_timeout(config.proxy_timeout or 5000)
                 httpc:proxy_response(httpc:proxy_request())
                 local keepalive = config.proxy_keepalive
