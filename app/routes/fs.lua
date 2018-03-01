@@ -429,7 +429,9 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 ngx.log(ngx.DEBUG, "redirect response")
                 return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
             elseif config.remote_response_mode == "proxy" and source_ip_addr then
-                ngx.log(ngx.DEBUG, "proxy response")
+                return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
+            elseif config.remote_response_mode == "proxy_lua" and source_ip_addr then
+                ngx.log(ngx.DEBUG, "proxy_lua response")
                 local httpc = http.new()
 
                 -- The generic form gives us more control. We must connect manually.
@@ -447,7 +449,6 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                     httpc:set_keepalive(keepalive.timeout, keepalive.size)
                 end
                 return
-                --return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
             end
         end
         --appender file need get filesize from server
