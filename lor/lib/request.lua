@@ -120,6 +120,7 @@ local function _multipart_formdata()
     if not form then
         ngx.log(ngx.ERR, "failed to new upload: ", err)
         ngx.exit(500)
+        return nil, "failed to new upload: " ..  err
     end
 
     form:set_timeout(1000*default_read_timeout) --milliseconds

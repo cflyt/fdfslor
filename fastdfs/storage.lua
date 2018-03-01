@@ -44,6 +44,8 @@ local FDFS_RECORD_SEPERATOR = '='
 local FDFS_FIELD_SEPERATOR = ';'
 local STORAGE_SET_METADATA_FLAG_OVERWRITE = 'O'
 
+local ERROR_BODY_MAX_SIZE = 256
+
 local mt = { __index = _M }
 local default_chunk_size = 1024 * 32
 
@@ -118,9 +120,8 @@ function send_request_by_reader(self, req, reader, file_size, chunk_size)
             end
             local bytes, err = sock:send(chunk)
             if not bytes then
-                ngx.log(ngx.ngx.ERR, "fdfs: send body error")
                 sock:close()
-                ngx.exit(500)
+                return false, "fdfs: send body error"
             end
 
             --ngx.log(ngx.ERR, "read len ", string.len(chunk), " send ", bytes)
@@ -128,9 +129,8 @@ function send_request_by_reader(self, req, reader, file_size, chunk_size)
         end
         if send_count ~= file_size then
             -- send file not full
-            ngx.log(ngx.ERR, "fdfs: read file body not full, send: " .. send_count, " file size: " .. file_size)
             sock:close()
-            ngx.exit(500)
+            return false, "fdfs: send file body not full, send " .. send_count .. " file size " .. file_size
         end
     end
     return true
@@ -147,6 +147,13 @@ function read_upload_result(self)
         return nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
         return nil, "read storage status error:" .. hdr.status
     end
     if hdr.len > 0 and hdr.status == 0 then
@@ -174,6 +181,19 @@ function read_update_result(self, op_name)
     if not hdr then
         return nil, "read storage header error:" .. err
     end
+
+    if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
+        return nil, "read storage status error:" .. hdr.status
+    end
+
     if hdr.status == 0 then
         -- keepalive
         local keepalive = self.keepalive
@@ -197,6 +217,14 @@ function read_download_result(self)
         return nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "read storage status error:" .. hdr.status
     end
     if hdr.len > 0 then
@@ -227,6 +255,14 @@ function read_download_result_cb(self, cb)
         return nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "read storage status error:" .. hdr.status
     end
     local buff_size = 1024 * 16
@@ -438,6 +474,14 @@ function read_file_info_result(self)
         return nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "read storage status error:" .. hdr.status
     end
     if hdr.len > 0 then
@@ -634,6 +678,14 @@ function read_download_result_to_reader(self, chunk_size)
     end
 
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, hdr.status, "read storage status error:" .. hdr.status
     end
 
@@ -687,6 +739,14 @@ function download_file_to_sock(self, fileid, start, stop, chunk_size)
         return nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
+        if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
+            sock:receive(hdr.len)
+        end
+        local keepalive = self.keepalive
+        if keepalive then
+            sock:setkeepalive(keepalive.timeout, keepalive.size)
+        end
+
         return nil, "read storage status error:" .. hdr.status
     end
 
