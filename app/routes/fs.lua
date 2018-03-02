@@ -14,6 +14,7 @@ local fdfs = fdfsClient:new()
 --fdfs:set_tracker_keepalive(0, 100)
 --fdfs:set_storage_keepalive(0, 100)
 --
+local http = require "resty.http"
 local config = require("conf.config")
 local storage_ids = config.storage_ids
 local store_paths = config.store_paths
@@ -64,6 +65,24 @@ local function fdfs_check_data_filename(filename)
     return true
 end
 
+local function _file_type(buf)
+    local c1, c2 = string.byte(buf, 1, 2)
+    local typecode = tonumber(c1..c2)
+    ngx.log(ngx.DEBUG, 'file code ', typecode)
+    local code_map = {
+        [7790] = 'exe',
+        [7784] = 'midi',
+        [8297] = 'rar',
+        [255216] = 'jpg',
+        [7173] = 'gif',
+        [6677] = 'bmp',
+        [13780] = 'png',
+        [3533] = 'amr',
+        [7368] = 'mp3',
+    }
+    return code_map[typecode] or 'unknown'
+end
+
 fsRouter:post("/file/new/", function(req, res, next)
     local reader = nil
     local filesize = 0
@@ -74,6 +93,9 @@ fsRouter:post("/file/new/", function(req, res, next)
         if args.bigofile and args.bigofile.filename then
             ext_name = _getextension(args.bigofile.filename)
             file = args.bigofile.file
+            file:seek("set", 0)
+            local ty = _file_type(file:read(2))
+            ngx.log(ngx.DEBUG, 'file type ', ty)
             file:seek("set", 0)
             filesize = file:seek("end")
             file:seek("set", 0)
@@ -89,7 +111,8 @@ fsRouter:post("/file/new/", function(req, res, next)
     end
     if not reader then
         --ngx.say("ERR: upload reader is nil")
-        ngx.exit(500)
+        res:status(500):send("Upload File Not Fount")
+        --ngx.exit(500)
         return
     end
     local fileid = nil
@@ -402,12 +425,31 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     local errno = nil
     if not is_exist_file then
         if not is_local_host then
-            if config.remote_response_mode == "redirect" then
+            if config.remote_response_mode == "redirect" and source_ip_addr then
                 ngx.log(ngx.DEBUG, "redirect response")
                 return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
-            elseif config.remote_response_mode == "proxy" then
-                ngx.log(ngx.DEBUG, "proxy response")
+            elseif config.remote_response_mode == "proxy" and source_ip_addr then
                 return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
+            elseif config.remote_response_mode == "proxy_lua" and source_ip_addr then
+                ngx.log(ngx.DEBUG, "proxy_lua response")
+                local httpc = http.new()
+
+                -- The generic form gives us more control. We must connect manually.
+                httpc:set_timeout(config.proxy_connect_timeout or 1000)
+                local ok, err = httpc:connect(source_ip_addr, 80)
+                if not ok then
+                    res:status(500):send("Can Not Connect ", source_ip_addr)
+                  return
+                end
+
+                ngx.req.set_header("Failover",  ngx.var.server_addr)
+                httpc:set_timeout(config.proxy_timeout or 5000)
+                httpc:proxy_response(httpc:proxy_request())
+                local keepalive = config.proxy_keepalive
+                if keepalive then
+                    httpc:set_keepalive(keepalive.timeout, keepalive.size)
+                end
+                return
             end
         end
         --appender file need get filesize from server
