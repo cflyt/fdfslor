@@ -92,7 +92,7 @@ local function _file_type(buf)
 end
 
 local function get_buddy_storages_from_id(storage_id, limit_num)
-    if not storage_id then
+    if not storage_id or type(storage_id) ~= "number" then
         return nil
     end
     if not limit_num or limit_num <= 0 then
