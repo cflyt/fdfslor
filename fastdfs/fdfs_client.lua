@@ -14,6 +14,7 @@ local pairs = pairs
 local tostring = tostring
 
 local VERSION = '0.1'
+local FDFS_V4 = true
 local default_chunk_size = 1024 * 32
 
 local _M = {}
@@ -61,6 +62,7 @@ end
 
 function _M.get_tracker(self)
     local tk = fdfs_tracker:new(self.timeout, self.tracker_keepalive)
+    tk:set_v4(FDFS_V4)
     local addr = self.trackers[math.random(#self.trackers)]
     local ok, err = tk:connect(addr)
     if ok then
@@ -87,6 +89,22 @@ function _M.get_storage(self, store_info)
         return nil, err
     end
     return st
+end
+
+function _M.list_groups(self)
+    local tk,err = self:get_tracker()
+    if not tk then
+        return nil, err
+    end
+    return tk:list_groups()
+end
+
+function _M.list_group_servers(self, group_name)
+    local tk,err = self:get_tracker()
+    if not tk then
+        return nil, err
+    end
+    return tk:list_servers(group_name)
 end
 
 function _M.do_upload(self, group, reader, file_size, ext_name, chunk_size)
@@ -185,14 +203,17 @@ function _M.do_delete(self, fileid, storage_ip)
 end
 
 
-function _M.do_download(self, fileid, start, stop, storage_ip)
+function _M.do_download(self, fileid, start, stop, storage_ip, failover)
+    if failover == nil then
+        failover = true
+    end
     local storage = nil
     local st_conn, err = nil, nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
         st_conn, err = self:get_storage(storage)
     end
-    if not st_conn then
+    if not st_conn and failover then
         local tk,err = self:get_tracker()
         if not tk then
             return nil, nil, err
@@ -201,13 +222,15 @@ function _M.do_download(self, fileid, start, stop, storage_ip)
         if not storage then
             return nil, nil, "can't query storage"
         end
-
+        ngx.log(ngx.ERR, "failover storage:", storage.host)
         st_conn, err = self:get_storage(storage)
         if not st_conn then
             return nil, nil, err
         end
-
+    elseif not st_conn then
+        return nil, nil, err
     end
+
 
     local chunk_size = default_chunk_size or 1024 * 64
     return st_conn:download_file_to_reader(fileid, start,stop, chunk_size)

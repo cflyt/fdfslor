@@ -7,6 +7,7 @@ local slen = string.len
 local ssub = string.sub
 local smatch = string.match
 local sendfile = sendfile
+local bit = bit
 local fsRouter = lor:Router() -- 生成一个group router对象
 local fdfs = fdfsClient:new()
 --fdfs:set_trackers({{host="192.168.56.10",port=22122}})
@@ -24,6 +25,13 @@ fdfs:set_timeout(config.tracker_timeout)
 fdfs:set_trackers(config.trackers)
 fdfs:set_tracker_keepalive(config.tracker_keepalive)
 fdfs:set_storage_keepalive(config.storage_keepalive)
+
+--lru cache
+local lrucache = require "resty.lrucache"
+local lruc, err = lrucache.new(1000)  -- allow up to 1000 items in the cache
+if not lruc then
+    return error("failed to create the lrccache: " .. (err or "unknown"))
+end
 
 local FDFS_LOGIC_FILE_NAME_MAX_LEN = 128
 local FDFS_FILE_EXT_NAME_MAX_LEN =  6
@@ -81,6 +89,22 @@ local function _file_type(buf)
         [7368] = 'mp3',
     }
     return code_map[typecode] or 'unknown'
+end
+
+local function get_buddy_storages_from_id(storage_id, limit_num)
+    if not storage_id then
+        return nil
+    end
+    if not limit_num or limit_num <= 0 then
+        limit_num = 3
+    end
+    local buddies = {}
+    local index = bit.band(storage_id, 0x03) --最后两位
+    local base = bit.lshift(bit.rshift(storage_id, 2), 2) --remove last two bit
+    for i=0, limit_num-1 do
+        table.insert(buddies, base+i)
+    end
+    return buddies
 end
 
 fsRouter:post("/file/new/", function(req, res, next)
@@ -274,6 +298,36 @@ local function get_source_ip_port(fileinfo)
     return source_ip_addr, source_port
 end
 
+local function has_same_trackers(group_name)
+    if not group_name or group_name == "" then
+        return false
+    end
+    local groups = lruc:get("tracker_groups")
+    if not groups then
+        ngx.log(ngx.DEBUG, "track groups set lrucache ")
+        local res, err = fdfs:list_groups()
+        if res and type(res) == "table" then
+            own_groups = res["groups"] or {}
+            groups = {}
+            local count = res["count"] or 0
+            for _, g in pairs(own_groups) do
+                if g["group_name"] and g["group_name"] ~= "" then
+                    groups[g["group_name"]] = 1
+                end
+            end
+            if count > 0 then
+                lruc:set("tracker_groups", groups)
+            end
+        end
+    end
+    if groups[group_name] then
+        return true
+    else
+        return false
+    end
+
+end
+
 local function is_local_ip(source_ip_addr)
     if not source_ip_addr or source_ip_addr == "" then
         return false
@@ -438,7 +492,8 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 httpc:set_timeout(config.proxy_connect_timeout or 1000)
                 local ok, err = httpc:connect(source_ip_addr, 80)
                 if not ok then
-                    res:status(500):send("Can Not Connect ", source_ip_addr)
+                    ngx.log(ngx.ERR, "can not connect storage ", source_ip_addr, ', ', err)
+                    res:status(500):send("Can Not Connect Storage")
                   return
                 end
 
@@ -471,7 +526,34 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         end
 
         ngx.log(ngx.DEBUG, "storage response")
-        reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr)
+        if has_same_trackers(req.params.group_id) then
+            ngx.log(ngx.DEBUG, "storage response, track failover")
+            reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, true)
+        else
+            ngx.log(ngx.DEBUG, "storage response, storage failover")
+            reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, false)
+            if not reader and fileinfo.source_id
+                    and fileinfo.source_id ~= ""
+                    and type(storage_ids) == "table" then
+                ngx.log(ngx.ERR, source_ip_addr, " download failed, try next storage id, err ", err)
+                local buddies_storage = get_buddy_storages_from_id(fileinfo.source_id)
+                ngx.log(ngx.DEBUG, "buddy storages  ", utils.dump(buddies_storage))
+                for i, b_id in pairs(buddies_storage) do
+                    if fileinfo.source_id ~= b_id then
+                        if storage_ids[b_id] then
+                            local b_ip = storage_ids[b_id].ip
+                            ngx.log(ngx.DEBUG, "try storage id ", b_id, " ip ", b_ip)
+                            reader, len, err = fdfs:do_download(fileid, start, stop, b_ip, false)
+                            if reader then
+                                break
+                            else
+                                ngx.log(ngx.ERR, b_ip, " download err, ", err, " try next storage id  ", i)
+                            end
+                        end
+                    end
+                end
+            end
+        end
         errno = len -- if failed, #2 return value marks status
     end
 
