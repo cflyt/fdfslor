@@ -101,8 +101,12 @@ local function get_buddy_storages_from_id(storage_id, limit_num)
     local buddies = {}
     local index = bit.band(storage_id, 0x03) --最后两位
     local base = bit.lshift(bit.rshift(storage_id, 2), 2) --remove last two bit
+    local bid
     for i=0, limit_num-1 do
-        table.insert(buddies, base+i)
+        bid = base + i
+        if bid ~= storage_id then
+            table.insert(buddies, bid)
+        end
     end
     return buddies
 end
@@ -404,7 +408,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             local create_time = fileinfo.timestamp
             local now = ngx.now()
             local elapse = now - create_time
-            if is_local_host or elapse > FILE_SYNC_MAX_TIME then
+            if is_local_host or elapse > FILE_SYNC_MAX_TIME or req.headers['Failover'] then
                 local offset = 0
                 if fileinfo.is_trunk then
                     offset = fileinfo.offset or 0
@@ -477,36 +481,69 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
     end
 
     local errno = nil
-    if not is_exist_file then
-        if not is_local_host then
-            if config.remote_response_mode == "redirect" and source_ip_addr then
-                ngx.log(ngx.DEBUG, "redirect response")
-                return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
-            elseif config.remote_response_mode == "proxy" and source_ip_addr then
-                return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
-            elseif config.remote_response_mode == "proxy_lua" and source_ip_addr then
-                ngx.log(ngx.DEBUG, "proxy_lua response")
-                local httpc = http.new()
+    if not is_exist_file and not req.headers['Failover'] then
+        if not is_local_host and config.remote_response_mode == "redirect" and source_ip_addr then
+            ngx.log(ngx.DEBUG, "redirect response")
+            return res:redirect("http://" .. source_ip_addr  .. ngx.var.request_uri)
+        end
+        if not is_local_host and config.remote_response_mode == "proxy" and source_ip_addr then
+            ngx.req.set_header("Failover",  ngx.var.server_addr)
+            return res:internal_redirect("/internal", {source_ip_addr=source_ip_addr})
+        end
 
-                -- The generic form gives us more control. We must connect manually.
-                httpc:set_timeout(config.proxy_connect_timeout or 1000)
-                local ok, err = httpc:connect(source_ip_addr, 80)
-                if not ok then
-                    ngx.log(ngx.ERR, "can not connect storage ", source_ip_addr, ', ', err)
-                    res:status(500):send("Can Not Connect Storage")
-                  return
-                end
-
-                ngx.req.set_header("Failover",  ngx.var.server_addr)
-                httpc:set_timeout(config.proxy_timeout or 5000)
-                httpc:proxy_response(httpc:proxy_request())
-                local keepalive = config.proxy_keepalive
-                if keepalive then
-                    httpc:set_keepalive(keepalive.timeout, keepalive.size)
-                end
-                return
+        local buddies_storage = get_buddy_storages_from_id(fileinfo.source_id) or {}
+        local buddies_ip = {}
+        table.insert(buddies_ip, source_ip_addr)
+        for i, b_id in pairs(buddies_storage) do
+            if storage_ids[b_id] then
+                local b_ip = storage_ids[b_id].ip
+                table.insert(buddies_ip, b_ip)
             end
         end
+        ngx.log(ngx.DEBUG, "buddy storages  ", utils.dump(buddies_ip))
+
+        if config.remote_response_mode == "proxy_lua" then
+            ngx.req.set_header("Failover",  ngx.var.server_addr)
+            ngx.log(ngx.DEBUG, "proxy_lua response")
+
+            local ok, re, err
+            local httpc = http.new()
+
+            -- The generic form gives us more control. We must connect manually.
+            httpc:set_timeout(config.proxy_connect_timeout or 1000)
+
+            for i, b_ip in pairs(buddies_ip) do
+                if not is_local_ip(b_ip) then
+                    ok, err = httpc:connect(b_ip, 80)
+                    if not ok then
+                        ngx.log(ngx.ERR, b_ip, " http_lua connect error, ", err, ", try next storage ", buddies_ip[i+1])
+                    else
+                        re, err = httpc:proxy_request()
+                        if not re then
+                            ngx.log(ngx.ERR, b_ip, " http_lua download error, ", err, ", try next storage ", buddies_ip[i+1])
+                        elseif re.status > 400 then
+                            err = re:read_body()
+                            ngx.log(ngx.ERR, b_ip, " http_lua download error, status ", re.status, ', ', err, ", try next storage ", buddies_ip[i+1])
+                        else
+                            break
+                        end
+                    end
+                end
+            end
+
+            if not ok then
+                res:status(500):send("Can't Connect upstream")
+                return
+            end
+
+            httpc:proxy_response(re)
+            local keepalive = config.proxy_keepalive
+            if keepalive then
+                httpc:set_keepalive(keepalive.timeout, keepalive.size)
+            end
+            return
+        end
+
         --appender file need get filesize from server
         if fileinfo.is_slave or fileinfo.is_appender then
             local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
@@ -531,25 +568,13 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, true)
         else
             ngx.log(ngx.DEBUG, "storage response, storage failover")
-            reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, false)
-            if not reader and fileinfo.source_id
-                    and fileinfo.source_id ~= ""
-                    and type(storage_ids) == "table" then
-                ngx.log(ngx.ERR, source_ip_addr, " download failed, try next storage id, err ", err)
-                local buddies_storage = get_buddy_storages_from_id(fileinfo.source_id)
-                ngx.log(ngx.DEBUG, "buddy storages  ", utils.dump(buddies_storage))
-                for i, b_id in pairs(buddies_storage) do
-                    if fileinfo.source_id ~= b_id then
-                        if storage_ids[b_id] then
-                            local b_ip = storage_ids[b_id].ip
-                            ngx.log(ngx.DEBUG, "try storage id ", b_id, " ip ", b_ip)
-                            reader, len, err = fdfs:do_download(fileid, start, stop, b_ip, false)
-                            if reader then
-                                break
-                            else
-                                ngx.log(ngx.ERR, b_ip, " download err, ", err, " try next storage id  ", i)
-                            end
-                        end
+            for i, b_ip in pairs(buddies_ip) do
+                if not is_local_ip(b_ip) then
+                    reader, len, err = fdfs:do_download(fileid, start, stop, b_ip, false)
+                    if reader then
+                        break
+                    else
+                        ngx.log(ngx.ERR, b_ip, " download err, ", err, ", try next storage ", buddies_ip[i+1])
                     end
                 end
             end
