@@ -936,9 +936,10 @@ function _M.proxy_response(self, response, chunksize)
 
     -- Filter out hop-by-hop headeres
     for k,v in pairs(response.headers) do
-        if not HOP_BY_HOP_HEADERS[str_lower(k)] then
-            ngx_header[k] = v
-        end
+        ngx_header[k] = v
+        --if not HOP_BY_HOP_HEADERS[str_lower(k)] then
+        --    ngx_header[k] = v
+        --end
     end
 
     local reader = response.body_reader
