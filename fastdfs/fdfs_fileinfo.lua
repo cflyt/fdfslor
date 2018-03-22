@@ -211,7 +211,7 @@ function _M.get_fileinfo_ex(filename_without_path)
     local is_appender = IS_APPENDER_FILE(filesize_1)
     if is_appender or is_slave then
         -- ngx.log(ngx.ERR, "IS A appender FILE")
-        filesize = -1
+        filesize = 0
     end
 
     -- ngx.log(ngx.ERR, "filesize :" , filesize)

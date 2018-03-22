@@ -467,11 +467,11 @@ end
 function read_file_info_result(self)
     local sock = self.sock
     if not sock then
-        return nil, "not initialized"
+        return nil, nil, "not initialized"
     end
     local hdr, err = read_fdfs_header(sock)
     if not hdr then
-        return nil, "read storage header error:" .. err
+        return nil, nil, "read storage header error:" .. err
     end
     if hdr.status ~= 0 then
         if hdr.len > 0 and hdr.len < ERROR_BODY_MAX_SIZE then
@@ -482,12 +482,12 @@ function read_file_info_result(self)
             sock:setkeepalive(keepalive.timeout, keepalive.size)
         end
 
-        return nil, "read storage status error:" .. hdr.status
+        return nil, hdr.status, "read storage status error:" .. hdr.status
     end
     if hdr.len > 0 then
         local data, err, partial = sock:receive(hdr.len)
         if not data then
-            return nil, "read file body error:" .. err
+            return nil, hdr.status, "read file body error:" .. err
         end
         local res, pos = {}, 1
         --res.size, pos = read_int(data, pos)
@@ -507,7 +507,7 @@ function read_file_info_result(self)
 
         return res
     end
-    return ''
+    return nil, hdr.status, "fileinfo read len =" .. hdr.len
 end
 
 -- get file info method

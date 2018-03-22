@@ -322,26 +322,30 @@ local function read_file_info_result(sock)
     return nil
 end
 
-function _M.get_fileinfo_from_storage(self, fileid, storage_ip)
+function _M.get_fileinfo_from_storage(self, fileid, storage_ip, failover)
+    if failover == nil then
+        failover = true
+    end
+
     local storage = nil
     local st_conn, err = nil, nil
     if storage_ip and string.match(storage_ip,"%d+.%d+.%d+.%d+") then
         storage = {host=storage_ip}
         st_conn, err = self:get_storage(storage)
     end
-    if not st_conn then
+    if not st_conn and failover then
         local tk,err = self:get_tracker()
         if not tk then
-            return nil, err
+            return nil, nil, err
         end
         storage = tk:query_storage_update1(fileid)
         if not storage then
-            return nil, "can't query storage"
+            return nil, nil, "can't query storage"
         end
 
         st_conn, err = self:get_storage(storage)
         if not st_conn then
-            return nil, err
+            return nil, nil, err
         end
 
     end

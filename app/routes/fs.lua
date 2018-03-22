@@ -118,7 +118,7 @@ fsRouter:post("/file/new/", function(req, res, next)
     local args = req:args()
     if req:is_multipart() then
         local args = req:args()
-        if args.bigofile and args.bigofile.filename then
+        if args.bigofile and args.file.filename then
             ext_name = _getextension(args.bigofile.filename)
             file = args.bigofile.file
             file:seek("set", 0)
@@ -544,38 +544,72 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             return
         end
 
-        --appender file need get filesize from server
-        if fileinfo.is_slave or fileinfo.is_appender then
-            local update_info = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr)
-            if update_info then
-                filesize = update_info.filesize
-            end
-        end
-        if req.range then
-            start, stop = req.range:range_for_length(filesize)
-            if not start then
-                res:status(416):send("Invalid Range")
-                return
-            end
-        else
-            start = 0
-            stop = filesize
-        end
-
+        -- storage query
         ngx.log(ngx.DEBUG, "storage response")
         if has_same_trackers(req.params.group_id) then
             ngx.log(ngx.DEBUG, "storage response, track failover")
+            --appender file need get filesize from server
+            if req.range and (fileinfo.is_slave or fileinfo.is_appender) then
+                local update_info
+                update_info, errno, err = fdfs:get_fileinfo_from_storage(fileid, source_ip_addr, true)
+                if update_info then
+                    filesize = update_info.filesize
+                else
+                    ngx.log(ngx.ERR, "slave or appender file get true filesize failed", err)
+                    if errno then
+                        res:status(404):send("Can't Read File Info, Err:".. err)
+                    else
+                        res:status(500):send("Can't Read File Info, Err:".. err)
+                    end
+                end
+            end
+            if req.range then
+                start, stop = req.range:range_for_length(filesize)
+                if not start then
+                    res:status(416):send("Invalid Range")
+                    return
+                end
+            else
+                start = 0
+                stop = filesize
+            end
+
+            ngx.log(ngx.DEBUG, 'query start ', start, ' stop ', stop, 'f_read_stop', f_read_stop, ' fileszie ', filesize)
             reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, true)
+
         else
             ngx.log(ngx.DEBUG, "storage response, storage failover")
             for i, b_ip in pairs(buddies_ip) do
                 if not is_local_ip(b_ip) then
-                    reader, len, err = fdfs:do_download(fileid, start, stop, b_ip, false)
-                    if reader then
-                        break
-                    else
-                        ngx.log(ngx.ERR, b_ip, " download err, ", err, ", try next storage ", buddies_ip[i+1])
+                    if filesize <= 0 and (fileinfo.is_slave or fileinfo.is_appender) then
+                        local update_info
+                        update_info, errno, err = fdfs:get_fileinfo_from_storage(fileid, b_ip, false)
+                        if update_info then
+                            filesize = update_info.filesize
+                        else
+                            ngx.log(ngx.ERR, b_ip, " slave or appender file get true filesize failed,", err, " try next ", buddies_ip[i+1])
+                        end
                     end
+
+                    if filesize > 0 then
+                        if req.range then
+                            start, stop = req.range:range_for_length(filesize)
+                            if not start then
+                                res:status(416):send("Invalid Range")
+                                return
+                            end
+                        else
+                            start = 0
+                            stop = filesize
+                        end
+                        ngx.log(ngx.DEBUG, "query start ", start, " stop ", stop, " fileszie ", filesize)
+                        reader, len, err = fdfs:do_download(fileid, start, stop, b_ip, false)
+                        if reader then
+                            break
+                        else
+                            ngx.log(ngx.ERR, b_ip, " download err, ", err, ", try next storage ", buddies_ip[i+1])
+                        end
+                   end
                 end
             end
         end
@@ -591,14 +625,18 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         end
         return
     end
-    res:set_header("Content-Length", len)
+    if filesize <= 0 then
+        filesize = len
+    end
     if req.range then
+        res:set_header("Content-Length", len)
         req.range.start = start
         req.range.stop = stop
         res:set_header("Content-Range", tostring(req.range:content_range(filesize)))
         res:set_header("Cache-Control", "max-age=315360000")
         res:status(206)
     else
+        res:set_header("Content-Length", len)
         res:set_header("Cache-Control", "max-age=315360000")
         res:status(200)
     end
@@ -673,7 +711,7 @@ fsRouter:head("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, re
     if req.range then
         start, stop = req.range:range_for_length(filesize)
         if not start then
-            res:status(400):send("Invalid Range")
+            res:status(416):send("Invalid Range")
             return
         end
     else
