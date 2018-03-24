@@ -342,12 +342,13 @@ function _M.get_fileinfo_from_storage(self, fileid, storage_ip, failover)
         if not storage then
             return nil, nil, "can't query storage"
         end
-
+        ngx.log(ngx.ERR, "failover storage:", storage.host)
         st_conn, err = self:get_storage(storage)
         if not st_conn then
             return nil, nil, err
         end
-
+    elseif not st_conn then
+        return nil, nil, err
     end
     --send data
     return st_conn:get_file_info1(fileid)
