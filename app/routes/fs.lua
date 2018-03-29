@@ -6,6 +6,7 @@ local utils = require("app.utils")
 local slen = string.len
 local ssub = string.sub
 local smatch = string.match
+local tostring = tostring
 local sendfile = sendfile
 local bit = bit
 local fsRouter = lor:Router() -- 生成一个group router对象
@@ -495,10 +496,13 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         local buddies_ip = {}
         table.insert(buddies_ip, source_ip_addr)
         for i, b_id in pairs(buddies_storage) do
-            if storage_ids[b_id] then
+            if storage_ids and type(storage_ids) == "table" and storage_ids[b_id] then
                 local b_ip = storage_ids[b_id].ip
                 table.insert(buddies_ip, b_ip)
             end
+        end
+        if table.getn(buddies_ip) then
+            err = "Storage Ip List Empty"
         end
         ngx.log(ngx.DEBUG, "buddy storages  ", utils.dump(buddies_ip))
 
@@ -620,8 +624,8 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         if errno then
             res:status(404):send("File Not Found, Err " .. errno)
         else
-            ngx.log(ngx.ERR, "Download Failed, " ..  err)
-            res:status(500):send("Can't Read, Err:".. err)
+            ngx.log(ngx.ERR, "Download Failed, " ..  tostring(err))
+            res:status(500):send("Can't Read, Err:".. tostring(err))
         end
         return
     end
