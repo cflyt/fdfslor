@@ -377,6 +377,7 @@ end
 fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res, next)
     ngx.log(ngx.DEBUG, tostring(req.range))
     ngx.log(ngx.DEBUG, utils.dump(req.params))
+    local errno = 404
     local logic_filename = table.concat( {req.params.storage_path, req.params.dir1, req.params.dir2, req.params.filename}, "/")
     if string.len(logic_filename) > FDFS_LOGIC_FILE_NAME_MAX_LEN or not fdfs_check_data_filename(logic_filename) then
         res:status(404):send("Not Fount")
@@ -481,7 +482,6 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
         end
     end
 
-    local errno = nil
     if not is_exist_file and not req.headers['Failover'] then
         if not is_local_host and config.remote_response_mode == "redirect" and source_ip_addr then
             ngx.log(ngx.DEBUG, "redirect response")
@@ -580,7 +580,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
 
             ngx.log(ngx.DEBUG, 'query start ', start, ' stop ', stop, 'f_read_stop', f_read_stop, ' fileszie ', filesize)
             reader, len, err = fdfs:do_download(fileid, start, stop, source_ip_addr, true)
-
+            errno = len -- if failed, #2 return value marks status
         else
             ngx.log(ngx.DEBUG, "storage response, storage failover")
             for i, b_ip in pairs(buddies_ip) do
@@ -611,13 +611,13 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                         if reader then
                             break
                         else
+                            errno = len -- if failed, #2 return value marks status
                             ngx.log(ngx.ERR, b_ip, " download err, ", err, ", try next storage ", buddies_ip[i+1])
                         end
                    end
                 end
             end
         end
-        errno = len -- if failed, #2 return value marks status
     end
 
     if not reader then
