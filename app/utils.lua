@@ -69,10 +69,11 @@ function _M.make_reader(data, chunk_size, total_size, cb_done)
             repeat
                 read_size = chunk_size
                 if remain and remain > 0 then
-                   if read_size < remain then
+                   if read_size >= remain then
                        read_size = remain
                    end
                 end
+
                 local chunk = file:read(read_size)
                 if not chunk then
                     break

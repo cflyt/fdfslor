@@ -469,10 +469,10 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                     return
                 end
 
-                ngx.log(ngx.DEBUG, "local file, use file:read()")
+                ngx.log(ngx.DEBUG, "local file, use file:read(), chunk size ", default_chunk_size)
                 --use file:read
                 fp:seek("set", offset)
-                reader = utils.make_reader(fp, chunk_size, stop-start,
+                reader = utils.make_reader(fp, default_chunk_size, stop-start,
                         function(fp)
                             fp:close()
                          end)
@@ -481,7 +481,6 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             end
         end
     end
-
     if not is_exist_file and not req.headers['Failover'] then
         if not is_local_host and config.remote_response_mode == "redirect" and source_ip_addr then
             ngx.log(ngx.DEBUG, "redirect response")
