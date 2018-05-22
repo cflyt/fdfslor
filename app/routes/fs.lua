@@ -539,8 +539,9 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 return
             end
 
-            ok = httpc:proxy_response(re)
             ngx.log(ngx.DEBUG, "httc reuse times " , httpc:get_reused_times())
+            ok = httpc:proxy_response(re)
+            ngx.log(ngx.DEBUG, "httc proxy_response result " , ok)
             local keepalive = config.proxy_keepalive
             if ok and keepalive then
                 httpc:set_keepalive(keepalive.timeout, keepalive.size)
@@ -548,6 +549,11 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
                 ngx.log(ngx.DEBUG, "proxy_lua close")
                 httpc:close()
             end
+
+            if not ok and re and (re.status == 200 or re.status == 206)  then
+                res:status(500):send("Lua Proxy Download Failed")
+            end
+
             return
         end
 
