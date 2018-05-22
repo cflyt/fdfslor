@@ -929,7 +929,7 @@ end
 function _M.proxy_response(self, response, chunksize)
     if not response then
         ngx_log(ngx_ERR, "no response provided")
-        return
+        return false
     end
 
     ngx.status = response.status
@@ -947,17 +947,18 @@ function _M.proxy_response(self, response, chunksize)
         local chunk, err = reader(chunksize)
         if err then
             ngx_log(ngx_ERR, err)
-            break
+            return false
         end
 
         if chunk then
             local res, err = ngx_print(chunk)
             if not res then
                 ngx_log(ngx_ERR, err)
-                break
+                return false
             end
         end
     until not chunk
+    return true
 end
 
 function _M.set_proxy_options(self, opts)
