@@ -32,31 +32,31 @@ function Response:render(view_file, data)
         data.locals = self.locals -- inject res.locals
 
         local body = self.view:render(view_file, data)
-        self:_send(body)
+        return self:_send(body)
     end
 end
 
 
 function Response:html(data)
     self:set_header('Content-Type', 'text/html; charset=UTF-8')
-    self:_send(data)
+    return self:_send(data)
 end
 
 function Response:json(data, empty_table_as_object)
     self:set_header('Content-Type', 'application/json; charset=utf-8')
-    self:_send(utils.json_encode(data, empty_table_as_object))
+    return self:_send(utils.json_encode(data, empty_table_as_object))
 end
 
 function Response:internal_redirect(url, args)
-    ngx.exec(url, args)
+    return ngx.exec(url, args)
 end
 
 function Response:redirect(url, code, query)
     if url and not code and not query then -- only one param
-        ngx.redirect(url)
+        return ngx.redirect(url)
     elseif url and code and not query then -- two param
         if type(code) == "number" then
-            ngx.redirect(url ,code)
+            return ngx.redirect(url ,code)
         elseif type(code) == "table" then
             query = code
             local q = {}
@@ -72,9 +72,9 @@ function Response:redirect(url, code, query)
                 url = url .. "?" .. tconcat(q, "&")
             end
 
-            ngx.redirect(url)
+            return ngx.redirect(url)
         else
-            ngx.redirect(url)
+            return ngx.redirect(url)
         end
     else -- three param
         local q = {}
@@ -89,7 +89,7 @@ function Response:redirect(url, code, query)
         if is_q_exist then
             url = url .. "?" .. tconcat(q, "&")
         end
-        ngx.redirect(url ,code)
+        return ngx.redirect(url ,code)
     end
 end
 
@@ -105,18 +105,18 @@ end
 
 function Response:send_text(text)
     self:set_header('Content-Type', 'text/plain; charset=UTF-8')
-    self:_send(text)
+    return self:_send(text)
 end
 
 function Response:send(data)
-    self:_send(data)
+    return self:_send(data)
 end
 
 --~=============================================================
 
 function Response:_send(content)
     -- ngx.status =  self.http_status or 200
-    ngx.print(content)
+    return ngx.print(content)
 end
 
 function Response:get_body()

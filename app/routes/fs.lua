@@ -661,8 +661,11 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             if not chunk then
                 break
             end
-            res:send(chunk)
+            ok, err = res:send(chunk)
             ngx.flush(true)
+            if not ok then
+                break
+            end
         end
         ngx.eof()
     end
