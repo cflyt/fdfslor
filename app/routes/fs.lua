@@ -540,7 +540,7 @@ fsRouter:get("/:group_id/:storage_path/:dir1/:dir2/:filename", function(req, res
             end
 
             ngx.log(ngx.DEBUG, "httc reuse times " , httpc:get_reused_times())
-            ok = httpc:proxy_response(re)
+            ok = httpc:proxy_response(re, default_chunk_size)
             ngx.log(ngx.DEBUG, "httc proxy_response result " , ok)
             local keepalive = config.proxy_keepalive
             if ok and keepalive then
